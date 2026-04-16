@@ -2,7 +2,7 @@
 
 #include <string>
 
-struct Reading
+struct ReadingDto
 {
     std::string sensorId;
     long timestamp;
