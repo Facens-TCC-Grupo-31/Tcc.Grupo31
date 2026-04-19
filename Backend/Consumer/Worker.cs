@@ -2,14 +2,14 @@ using MQTTnet;
 
 namespace Consumer;
 
-public class Worker(ILogger<Worker> logger, IConfiguration configuration) : BackgroundService
+public class Worker(ILogger<Worker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        string broker = configuration["MQTT_BROKER"] ?? "localhost";
-        int port = int.TryParse(configuration["MQTT_PORT"], out var configuredPort) ? configuredPort : 1883;
+        string broker = "localhost";
+        int port = 1883;
         string clientId = Guid.NewGuid().ToString();
-        string topic = "devices/samples";
+        string topic = "test/topic";
 
         var factory = new MqttClientFactory();
 
