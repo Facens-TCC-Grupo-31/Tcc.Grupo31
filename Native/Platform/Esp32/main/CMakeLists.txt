@@ -6,5 +6,5 @@ idf_component_register(SRCS "main.cpp"
                     "states/wifi_state.cpp"
                     "states/operational_state.cpp"
                     "states/error_state.cpp"
-                    INCLUDE_DIRS "." "../../../Abstractions"
+                    INCLUDE_DIRS "." "../../../Abstractions" "../../../Contacts"
                     REQUIRES mqtt esp_wifi esp_netif nvs_flash esp_driver_gpio bt)
