@@ -1,2 +1,10 @@
 idf_component_register(SRCS "main.cpp"
-                    INCLUDE_DIRS "." "../../../Abstractions")
+                    "app/app_dispatcher.cpp"
+                    "storage/config_store.cpp"
+                    "provisioning/provisioning_ble_transport.cpp"
+                    "states/provisioning_state.cpp"
+                    "states/wifi_state.cpp"
+                    "states/operational_state.cpp"
+                    "states/error_state.cpp"
+                    INCLUDE_DIRS "." "../../../Abstractions"
+                    REQUIRES mqtt esp_wifi esp_netif nvs_flash esp_driver_gpio bt)
