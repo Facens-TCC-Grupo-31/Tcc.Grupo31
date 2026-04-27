@@ -13,8 +13,6 @@
 #include "Reader.h"
 #include "Gateway.h"
 #include "EspFeeder.h"
-#include "ReadingDto.h"
-#include "ProvisioningDto.h"
 #include "../app/app_context.h"
 #include "../app/app_dispatcher.h"
 
@@ -22,25 +20,28 @@ static const char *TAG = "OperationalState";
 static constexpr const char *REGISTRATION_TOPIC = "devices/register";
 static constexpr const char *TELEMETRY_TOPIC = "devices/samples";
 
-class SimpleSampler : public Reader<ReadingDto>
+struct SampleData
+{
+    uint32_t timestamp;
+    int32_t value;
+};
+
+class SimpleSampler : public Reader<SampleData>
 {
     int counter = 0;
-    std::string device_id_;
 
 public:
-    explicit SimpleSampler(const char *device_id) : device_id_(device_id) {}
-
-    std::optional<ReadingDto> read() override
+    std::optional<SampleData> read() override
     {
-        ReadingDto data;
-        data.sensorId = device_id_;
-        data.fillLevel = static_cast<float>(counter++);
-        ESP_LOGI(TAG, "Sampled fill level: %.2f for sensor: %s", data.fillLevel, data.sensorId.c_str());
+        SampleData data;
+        data.timestamp = xTaskGetTickCount();
+        data.value = counter++;
+        ESP_LOGI(TAG, "Sampled value: %ld at tick: %lu", data.value, data.timestamp);
         return data;
     }
 };
 
-class MqttSampleGateway : public Gateway<ReadingDto>
+class MqttSampleGateway : public Gateway<SampleData>
 {
     esp_mqtt_client_handle_t client_ = nullptr;
     std::atomic<bool> connected_{false};
@@ -131,7 +132,7 @@ public:
         }
     }
 
-    void send(const ReadingDto &data) override
+    void send(const SampleData &data) override
     {
         if (!connected_.load())
         {
@@ -141,16 +142,12 @@ public:
 
         if (has_registration_token_)
         {
-            ProvisioningDto registration;
-            registration.deviceId = device_id_;
-            registration.token = registration_token_;
-
             char registration_payload[APP_CONFIG_DEVICE_ID_MAX + APP_RUNTIME_TOKEN_MAX + 48] = {};
             std::snprintf(registration_payload,
                           sizeof(registration_payload),
                           "{\"deviceId\":\"%s\",\"token\":\"%s\"}",
-                          registration.deviceId.c_str(),
-                          registration.token.c_str());
+                          device_id_,
+                          registration_token_);
 
             const int registration_message_id = esp_mqtt_client_publish(client_, REGISTRATION_TOPIC, registration_payload, 0, 1, 0);
             if (registration_message_id >= 0)
@@ -169,26 +166,27 @@ public:
             return;
         }
 
-        char telemetry_payload[APP_CONFIG_DEVICE_ID_MAX + 64] = {};
+        char telemetry_payload[APP_CONFIG_DEVICE_ID_MAX + 96] = {};
         std::snprintf(telemetry_payload,
                       sizeof(telemetry_payload),
-                      "{\"sensorId\":\"%s\",\"fillLevel\":%.2f}",
-                      data.sensorId.c_str(),
-                      data.fillLevel);
+                      "{\"deviceId\":\"%s\",\"timestamp\":%lu,\"value\":%ld}",
+                      device_id_,
+                      static_cast<unsigned long>(data.timestamp),
+                      static_cast<long>(data.value));
 
         const int message_id = esp_mqtt_client_publish(client_, TELEMETRY_TOPIC, telemetry_payload, 0, 1, 0);
 
         if (message_id >= 0)
         {
-            ESP_LOGI(TAG, "Published fill level %.2f for sensor %s", data.fillLevel, data.sensorId.c_str());
+            ESP_LOGI(TAG, "Published telemetry value %ld for device %s", data.value, device_id_);
             return;
         }
 
-        ESP_LOGE(TAG, "Failed to publish fill level %.2f for sensor %s", data.fillLevel, data.sensorId.c_str());
+        ESP_LOGE(TAG, "Failed to publish telemetry value %ld for device %s", data.value, device_id_);
     }
 };
 
-static std::unique_ptr<EspFeeder<ReadingDto>> s_feeder;
+static std::unique_ptr<EspFeeder<SampleData>> s_feeder;
 
 static void enter(app_context_t *)
 {
@@ -202,9 +200,9 @@ static void run(app_context_t *context)
         return;
     }
 
-    auto sampler = std::make_unique<SimpleSampler>(context->config.device_id);
+    auto sampler = std::make_unique<SimpleSampler>();
     auto gateway = std::make_unique<MqttSampleGateway>(context);
-    s_feeder = std::make_unique<EspFeeder<ReadingDto>>(std::move(sampler), std::move(gateway));
+    s_feeder = std::make_unique<EspFeeder<SampleData>>(std::move(sampler), std::move(gateway));
     s_feeder->start();
     ESP_LOGI(TAG, "Operational workload started");
 }
