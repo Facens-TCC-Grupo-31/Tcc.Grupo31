@@ -1,8 +1,8 @@
 ﻿namespace Application.Common.Dtos;
 
-public class ReadingDto
+public sealed class ReadingDto
 {
-    public required string SensorId { get; set; }
-    public required long Timestamp { get; set; }
-    public required float FillLevel { get; set; }
+    public required long SensorId { get; init; }
+    public required float FillLevel { get; init; }
+    public required DateTime Timestamp { get; init; }
 }
