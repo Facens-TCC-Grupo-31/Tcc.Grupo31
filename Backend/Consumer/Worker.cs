@@ -1,4 +1,6 @@
 using Application.Common.Constants;
+using Application.Handlers.RegisterMessageReceived;
+using Application.Handlers.SensorSampleReceived.Models;
 using MediatR;
 using MQTTnet;
 

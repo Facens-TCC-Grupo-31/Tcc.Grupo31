@@ -72,8 +72,7 @@ public sealed class SensorsController(
         var response = readings.Select(r => new ReadingDto
         {
             SensorId = r.SensorId,
-            FillLevel = r.FillLevel,
-            Timestamp = r.Timestamp
+            FillLevel = r.FillLevel
         }
         ).ToList();
 

@@ -8,7 +8,7 @@ namespace Infrastructure.Services;
 
 internal sealed class GraphService(
     AppDbContext db,
-    ILogger<GraphService> logger) : IGraphService, IDisposable
+    ILogger<GraphService> logger) : IGraphService
 {
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(2);
     private static readonly SemaphoreSlim WriteLock = new(1, 1);
@@ -89,11 +89,6 @@ internal sealed class GraphService(
         );
 
         return newNode.Id;
-    }
-
-    public void Dispose()
-    {
-        // Static lock/cache lifetime intentionally matches process lifetime.
     }
 
     private async Task EnsureLoadedAsync(CancellationToken ct)

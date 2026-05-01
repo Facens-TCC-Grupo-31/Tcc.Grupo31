@@ -1,4 +1,5 @@
-using Application.Common.DependencyInjection;
+using Infrastructure.Common;
+using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,13 +8,7 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 
-var redisConn = builder.Configuration.GetConnectionString("Redis")
-    ?? throw new InvalidOperationException("Redis connection string 'Redis' is required.");
-
-builder.Services.AddApplicationServices(redisConn);
-builder.Services.AddApplicationDbContext(
-    builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required."));
+builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
