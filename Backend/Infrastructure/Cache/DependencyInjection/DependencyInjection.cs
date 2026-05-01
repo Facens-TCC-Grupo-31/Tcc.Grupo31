@@ -14,7 +14,7 @@ public static class DependencyInjection
             .Get<RedisOptions>()
             ?? throw new InvalidOperationException($"Configuration section '{RedisOptions.SectionName}' is required.");
         
-        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions.ConfigurationString));
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions.Configuration));
 
         return services;
     }

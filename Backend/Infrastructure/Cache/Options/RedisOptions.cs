@@ -4,5 +4,5 @@ public class RedisOptions
 {
     public const string SectionName = "Redis";
 
-    public string ConfigurationString { get; set; } = default!;
+    public string Configuration { get; set; } = default!;
 }
