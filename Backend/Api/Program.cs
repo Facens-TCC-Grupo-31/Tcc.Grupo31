@@ -1,5 +1,4 @@
 using Application.Common.DependencyInjection;
-using Application.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);

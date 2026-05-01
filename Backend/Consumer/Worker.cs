@@ -1,22 +1,14 @@
-using System.Text.Json;
-using Application.Common.Dtos;
-using Application.Mqtt;
-using Application.Services.Abstractions;
+using Application.Common.Constants;
+using MediatR;
 using MQTTnet;
 
 namespace Consumer;
 
 public sealed class Worker(
-    ISensorRegistrationService registrationService,
-    IReadingService readingService,
     IConfiguration configuration,
+    IMediator mediator,
     ILogger<Worker> logger) : BackgroundService
 {
-    private readonly JsonSerializerOptions _jsonSerializerOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         string broker = configuration["Mqtt:Broker"]
@@ -61,7 +53,7 @@ public sealed class Worker(
             new MqttTopicFilterBuilder().WithTopic(MqttTopics.Register).Build(),
             stoppingToken
         );
-        
+
         await mqttClient.SubscribeAsync(
             new MqttTopicFilterBuilder().WithTopic(MqttTopics.Samples).Build(),
             stoppingToken
@@ -89,19 +81,19 @@ public sealed class Worker(
             topic,
             payload
         );
-        
+
         try
         {
             switch (topic)
             {
                 case MqttTopics.Register:
-                    await HandleRegistrationAsync(payload);
+                    await mediator.Send(new HandleRegisterMessageReceivedCommand(payload), default);
                     break;
 
                 case MqttTopics.Samples:
-                    await HandleSampleAsync(payload);
+                    await mediator.Send(new HandleSensorSampleReceivedCommand(payload), default);
                     break;
-            
+
                 default:
                     logger.LogWarning("Received message on unexpected topic {Topic}", topic);
                     return;
@@ -110,90 +102,6 @@ public sealed class Worker(
         catch (Exception ex)
         {
             logger.LogError(ex, "Unhandled error processing message on topic {Topic}", topic);
-        }
-    }
-
-    private async Task HandleRegistrationAsync(string payload)
-    {
-        RegisterMessageDto? dto;
-        try
-        {
-            dto = JsonSerializer.Deserialize<RegisterMessageDto>(
-                payload,
-                _jsonSerializerOptions
-            );
-        }
-        catch (JsonException ex)
-        {
-            logger.LogError(
-                ex,
-                "Failed to deserialize {Topic} payload: {Payload}",
-                MqttTopics.Register,
-                payload
-            );
-
-            return;
-        }
-
-        if (dto is null)
-        {
-            logger.LogError(
-                "Null deserialization result for {Topic} payload",
-                MqttTopics.Register
-            );
-
-            return;
-        }
-
-        bool ok = await registrationService.CompleteRegistrationAsync(dto.SensorId, dto.Token);
-        if (!ok)
-        {
-            logger.LogWarning(
-                "Registration completion rejected for sensor {SensorId}",
-                dto.SensorId
-            );
-        }
-    }
-
-    private async Task HandleSampleAsync(string payload)
-    {
-        ReadingDto? dto;
-        try
-        {
-            dto = JsonSerializer.Deserialize<ReadingDto>(
-                payload,
-                _jsonSerializerOptions
-            );
-        }
-        catch (JsonException ex)
-        {
-            logger.LogError(
-                ex,
-                "Failed to deserialize {Topic} payload: {Payload}",
-                MqttTopics.Samples,
-                payload
-            );
-
-            return;
-        }
-
-        if (dto is null)
-        {
-            logger.LogError(
-                "Null deserialization result for {Topic} payload",
-                MqttTopics.Samples
-            );
-
-            return;
-        }
-
-        bool ok = await readingService.RegisterReadingAsync(dto.SensorId, dto.FillLevel);
-        if (!ok)
-        {
-            logger.LogWarning(
-                "Sample rejected for sensor {SensorId} (inactive or invalid range)",
-                dto.SensorId
-            );
         }
     }
 }

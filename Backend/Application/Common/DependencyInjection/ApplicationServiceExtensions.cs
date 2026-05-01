@@ -1,7 +1,5 @@
-using Application.Infrastructure.DependencyInjection;
-using Application.Persistence;
+using Application.Cache.DependencyInjection;
 using Application.Services;
-using Application.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 

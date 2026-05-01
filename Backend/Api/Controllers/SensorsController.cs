@@ -1,5 +1,5 @@
 using Application.Common.Dtos;
-using Application.Services.Abstractions;
+using Application.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
