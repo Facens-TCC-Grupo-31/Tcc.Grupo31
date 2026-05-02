@@ -1,6 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY Domain/Domain.csproj Domain/
+COPY Application/Application.csproj Application/
+COPY Infrastructure/Infrastructure.csproj Infrastructure/
 COPY Consumer/Consumer.csproj Consumer/
 RUN dotnet restore Consumer/Consumer.csproj
 
