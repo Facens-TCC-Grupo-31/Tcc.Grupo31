@@ -1,6 +1,5 @@
 ﻿using Infrastructure.Cache.DependencyInjection;
 using Infrastructure.Database.DependencyInjection;
-using Infrastructure.Mqtt.DependencyInjection;
 using Infrastructure.Services.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +12,5 @@ public static class DependencyInjection
         => services
             .AddServices()
             .AddDatabase(configuration)
-            .AddRedis(configuration)
-            .AddMqtt(configuration);
+            .AddRedis(configuration);
 }

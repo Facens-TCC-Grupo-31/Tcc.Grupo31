@@ -35,7 +35,7 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/mosquitto:/mosquitto/config:ro
     healthcheck:
       test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/#", "-C", "1"]
       interval: 10s

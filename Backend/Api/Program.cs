@@ -1,3 +1,4 @@
+using Application.DependencyInjection;
 using Infrastructure.Common;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
