@@ -20,10 +20,8 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+app.MapOpenApi();
+app.UseSwaggerUI(x => x.SwaggerEndpoint("/openapi/v1.json", "OpenAPI v1"));
 
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
