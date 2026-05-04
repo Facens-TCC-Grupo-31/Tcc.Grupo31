@@ -19,6 +19,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(s => s.Id).UseIdentityAlwaysColumn();
 
             e.Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+
+            e.HasIndex(s => s.NodeId);
+
+            e.HasOne(s => s.Node)
+             .WithMany(n => n.Sensors)
+             .HasForeignKey(s => s.NodeId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.ToTable(tableBuilder =>
+                tableBuilder.HasCheckConstraint(
+                    "CK_Sensors_IsActive_RequiresNode",
+                    "\"IsActive\" = false OR \"NodeId\" IS NOT NULL"
+                ));
         });
 
         modelBuilder.Entity<SensorReading>(e =>

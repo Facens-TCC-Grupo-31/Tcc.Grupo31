@@ -17,7 +17,7 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException($"Configuration section '{RedisOptions.SectionName}' is required.");
         
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions.Configuration));
-        services.AddSingleton<IProvisioningTokenStore, RedisProvisioningTokenStore>();
+        services.AddSingleton<IProvisioningDataCache, RedisProvisioningDataCache>();
         services.AddSingleton<ISensorLatestValueCache, RedisSensorLatestValueCache>();
 
         return services;

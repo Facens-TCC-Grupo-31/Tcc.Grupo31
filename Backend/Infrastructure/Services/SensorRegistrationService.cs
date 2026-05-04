@@ -9,7 +9,7 @@ namespace Infrastructure.Services;
 
 internal sealed class SensorRegistrationService(
     AppDbContext db,
-    IProvisioningTokenStore tokenStore,
+    IProvisioningDataCache provisioningDataCache,
     IGraphService graphService,
     ILogger<SensorRegistrationService> logger) : ISensorRegistrationService
 {
@@ -18,8 +18,6 @@ internal sealed class SensorRegistrationService(
     {
         var sensor = new Sensor
         {
-            Latitude = latitude,
-            Longitude = longitude,
             IsActive = false,
             CreatedAt = DateTime.UtcNow
         };
@@ -28,7 +26,10 @@ internal sealed class SensorRegistrationService(
         await db.SaveChangesAsync(ct);
 
         string token = Guid.NewGuid().ToString();
-        await tokenStore.SetAsync(sensor.Id, token, ct);
+        await provisioningDataCache.SetAsync(
+            sensor.Id,
+            new ProvisioningRegistrationContext(token, latitude, longitude),
+            ct);
 
         logger.LogInformation(
             "Registration requested for sensor {SensorId} at ({Lat},{Lon})",
@@ -72,8 +73,8 @@ internal sealed class SensorRegistrationService(
             return false;
         }
 
-        string? storedToken = await tokenStore.ConsumeAsync(sensorId, ct);
-        if (storedToken is null || storedToken != token)
+        ProvisioningRegistrationContext? registrationContext = await provisioningDataCache.ConsumeAsync(sensorId, ct);
+        if (registrationContext is null || registrationContext.Token != token)
         {
             logger.LogWarning(
                 "Invalid or expired token for sensor {SensorId}", sensorId);
@@ -83,8 +84,8 @@ internal sealed class SensorRegistrationService(
         try
         {
             await graphService.ApplyNearestEdgeSplitAsync(
-                sensor.Latitude,
-                sensor.Longitude,
+                registrationContext.Latitude,
+                registrationContext.Longitude,
                 async newNodeId =>
                 {
                     sensor.IsActive = true;

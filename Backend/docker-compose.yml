@@ -84,4 +84,5 @@ services:
 
 volumes:
   postgres_data:
+    name: tcc_postgres_data
   redis_data:

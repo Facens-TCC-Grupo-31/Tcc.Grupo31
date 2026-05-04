@@ -3,26 +3,29 @@ using System;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Application.Persistence.Migrations
+namespace Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260504113507_SensorNodeConstraintAndRemoveSensorLocation")]
+    partial class SensorNodeConstraintAndRemoveSensorLocation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.4")
+                .HasAnnotation("ProductVersion", "10.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Application.Persistence.Entities.GraphEdge", b =>
+            modelBuilder.Entity("Domain.Entities.GraphEdge", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -51,7 +54,7 @@ namespace Application.Persistence.Migrations
                     b.ToTable("GraphEdges");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.GraphNode", b =>
+            modelBuilder.Entity("Domain.Entities.GraphNode", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -70,7 +73,7 @@ namespace Application.Persistence.Migrations
                     b.ToTable("GraphNodes");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.Sensor", b =>
+            modelBuilder.Entity("Domain.Entities.Sensor", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -89,21 +92,20 @@ namespace Application.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<double>("Latitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("Longitude")
-                        .HasColumnType("double precision");
-
                     b.Property<int?>("NodeId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Sensors");
+                    b.HasIndex("NodeId");
+
+                    b.ToTable("Sensors", t =>
+                        {
+                            t.HasCheckConstraint("CK_Sensors_IsActive_RequiresNode", "\"IsActive\" = false OR \"NodeId\" IS NOT NULL");
+                        });
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.SensorReading", b =>
+            modelBuilder.Entity("Domain.Entities.SensorReading", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -127,9 +129,19 @@ namespace Application.Persistence.Migrations
                     b.ToTable("SensorReadings");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.SensorReading", b =>
+            modelBuilder.Entity("Domain.Entities.Sensor", b =>
                 {
-                    b.HasOne("Application.Persistence.Entities.Sensor", "Sensor")
+                    b.HasOne("Domain.Entities.GraphNode", "Node")
+                        .WithMany("Sensors")
+                        .HasForeignKey("NodeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Node");
+                });
+
+            modelBuilder.Entity("Domain.Entities.SensorReading", b =>
+                {
+                    b.HasOne("Domain.Entities.Sensor", "Sensor")
                         .WithMany("Readings")
                         .HasForeignKey("SensorId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -138,7 +150,12 @@ namespace Application.Persistence.Migrations
                     b.Navigation("Sensor");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.Sensor", b =>
+            modelBuilder.Entity("Domain.Entities.GraphNode", b =>
+                {
+                    b.Navigation("Sensors");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Sensor", b =>
                 {
                     b.Navigation("Readings");
                 });

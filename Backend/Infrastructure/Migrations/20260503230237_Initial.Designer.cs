@@ -9,23 +9,71 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Application.Persistence.Migrations
+namespace Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260420010422_InitialSchema")]
-    partial class InitialSchema
+    [Migration("20260503230237_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.4")
+                .HasAnnotation("ProductVersion", "10.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Application.Persistence.Entities.Sensor", b =>
+            modelBuilder.Entity("Domain.Entities.GraphEdge", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<int>("Id"));
+
+                    b.Property<double>("Distance")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("FromNodeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ToNodeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromNodeId");
+
+                    b.HasIndex("ToNodeId");
+
+                    b.HasIndex("FromNodeId", "ToNodeId")
+                        .IsUnique();
+
+                    b.ToTable("GraphEdges");
+                });
+
+            modelBuilder.Entity("Domain.Entities.GraphNode", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<int>("Id"));
+
+                    b.Property<double>("X")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Y")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GraphNodes");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Sensor", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -58,7 +106,7 @@ namespace Application.Persistence.Migrations
                     b.ToTable("Sensors");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.SensorReading", b =>
+            modelBuilder.Entity("Domain.Entities.SensorReading", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -82,9 +130,9 @@ namespace Application.Persistence.Migrations
                     b.ToTable("SensorReadings");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.SensorReading", b =>
+            modelBuilder.Entity("Domain.Entities.SensorReading", b =>
                 {
-                    b.HasOne("Application.Persistence.Entities.Sensor", "Sensor")
+                    b.HasOne("Domain.Entities.Sensor", "Sensor")
                         .WithMany("Readings")
                         .HasForeignKey("SensorId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -93,7 +141,7 @@ namespace Application.Persistence.Migrations
                     b.Navigation("Sensor");
                 });
 
-            modelBuilder.Entity("Application.Persistence.Entities.Sensor", b =>
+            modelBuilder.Entity("Domain.Entities.Sensor", b =>
                 {
                     b.Navigation("Readings");
                 });
