@@ -280,6 +280,15 @@ extern "C" void app_main(void)
 
     if (app_config_load_if_valid(&s_app_context.config))
     {
+        s_app_context.has_registration_token = (s_app_context.config.registration_token[0] != '\0');
+        s_app_context.registration_token[0] = '\0';
+        if (s_app_context.has_registration_token)
+        {
+            copy_string(s_app_context.registration_token,
+                        sizeof(s_app_context.registration_token),
+                        s_app_context.config.registration_token);
+        }
+
         apply_runtime_config(s_app_context.config);
         app_dispatcher_transition_to(&s_app_context, APP_STATE_CONNECTING_WIFI, APP_EVENT_STARTUP);
     }

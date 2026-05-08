@@ -40,7 +40,7 @@ internal sealed class SensorRegistrationService(
 
         return new RegistrationResponseDto
         {
-            SensorNodeId = sensor.Id,
+            SensorId = sensor.Id,
             ProvisioningToken = token
         };
     }
@@ -116,5 +116,3 @@ internal sealed class SensorRegistrationService(
         return true;
     }
 }
-
-

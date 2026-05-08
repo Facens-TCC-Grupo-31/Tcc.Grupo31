@@ -48,7 +48,7 @@ internal class RegisterMessageReceivedHandler(
             return;
         }
 
-        bool ok = await registrationService.CompleteRegistrationAsync(dto.SensorId, dto.Token);
+        bool ok = await registrationService.CompleteRegistrationAsync(dto.SensorId, dto.ProvisioningToken);
         if (!ok)
         {
             logger.LogWarning(

@@ -225,6 +225,60 @@ static bool extract_json_string(const char *json, const char *key, char *destina
     return true;
 }
 
+static bool extract_json_number_token(const char *json, const char *key, char *destination, size_t destination_size)
+{
+    if (json == nullptr || key == nullptr || destination == nullptr || destination_size == 0)
+    {
+        return false;
+    }
+
+    char pattern[48] = {};
+    std::snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const char *key_position = std::strstr(json, pattern);
+    if (key_position == nullptr)
+    {
+        return false;
+    }
+
+    const char *colon = std::strchr(key_position + std::strlen(pattern), ':');
+    if (colon == nullptr)
+    {
+        return false;
+    }
+
+    const char *value_start = skip_spaces(colon + 1);
+    if (value_start == nullptr)
+    {
+        return false;
+    }
+
+    const char *cursor = value_start;
+    if (*cursor == '-')
+    {
+        ++cursor;
+    }
+
+    if (!std::isdigit(static_cast<unsigned char>(*cursor)))
+    {
+        return false;
+    }
+
+    while (std::isdigit(static_cast<unsigned char>(*cursor)) != 0)
+    {
+        ++cursor;
+    }
+
+    const size_t value_len = static_cast<size_t>(cursor - value_start);
+    if (value_len == 0 || value_len >= destination_size)
+    {
+        return false;
+    }
+
+    std::memcpy(destination, value_start, value_len);
+    destination[value_len] = '\0';
+    return true;
+}
+
 static bool parse_payload_json(const char *json, provisioning_payload_t *payload)
 {
     if (json == nullptr || payload == nullptr)
@@ -233,7 +287,7 @@ static bool parse_payload_json(const char *json, provisioning_payload_t *payload
     }
 
     provisioning_payload_t parsed = {};
-    if (!extract_json_string(json, "device_id", parsed.config.device_id, sizeof(parsed.config.device_id)))
+    if (!extract_json_number_token(json, "sensorId", parsed.config.sensor_id, sizeof(parsed.config.sensor_id)))
     {
         return false;
     }
@@ -248,12 +302,12 @@ static bool parse_payload_json(const char *json, provisioning_payload_t *payload
         parsed.config.password[0] = '\0';
     }
 
-    if (!extract_json_string(json, "mqtt_broker_uri", parsed.config.mqtt_uri, sizeof(parsed.config.mqtt_uri)))
+    if (!extract_json_string(json, "mqttBrokerUri", parsed.config.mqtt_uri, sizeof(parsed.config.mqtt_uri)))
     {
         return false;
     }
 
-    parsed.has_token = extract_json_string(json, "token", parsed.token, sizeof(parsed.token));
+    parsed.has_token = extract_json_string(json, "provisioningToken", parsed.token, sizeof(parsed.token));
     *payload = parsed;
     return true;
 }
@@ -553,7 +607,7 @@ esp_err_t provisioning_transport_submit_ble_payload(const provisioning_payload_t
     }
 
     s_pending_payload = {};
-    copy_string(s_pending_payload.config.device_id, sizeof(s_pending_payload.config.device_id), payload->config.device_id);
+    copy_string(s_pending_payload.config.sensor_id, sizeof(s_pending_payload.config.sensor_id), payload->config.sensor_id);
     copy_string(s_pending_payload.config.ssid, sizeof(s_pending_payload.config.ssid), payload->config.ssid);
     copy_string(s_pending_payload.config.password, sizeof(s_pending_payload.config.password), payload->config.password);
     copy_string(s_pending_payload.config.mqtt_uri, sizeof(s_pending_payload.config.mqtt_uri), payload->config.mqtt_uri);

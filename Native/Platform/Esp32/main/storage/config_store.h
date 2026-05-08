@@ -3,16 +3,18 @@
 #include <stdbool.h>
 #include <esp_err.h>
 
-#define APP_CONFIG_DEVICE_ID_MAX 32
+#define APP_CONFIG_SENSOR_ID_MAX 32
 #define APP_CONFIG_SSID_MAX 32
 #define APP_CONFIG_PASSWORD_MAX 64
 #define APP_CONFIG_MQTT_URI_MAX 128
+#define APP_CONFIG_REGISTRATION_TOKEN_MAX 128
 
 typedef struct {
-    char device_id[APP_CONFIG_DEVICE_ID_MAX + 1];
+    char sensor_id[APP_CONFIG_SENSOR_ID_MAX + 1];
     char ssid[APP_CONFIG_SSID_MAX + 1];
     char password[APP_CONFIG_PASSWORD_MAX + 1];
     char mqtt_uri[APP_CONFIG_MQTT_URI_MAX + 1];
+    char registration_token[APP_CONFIG_REGISTRATION_TOKEN_MAX + 1];
 } app_device_config_t;
 
 esp_err_t app_config_validate(const app_device_config_t *config);

@@ -7,10 +7,11 @@
 
 static constexpr const char *NVS_NAMESPACE = "app_cfg";
 static constexpr const char *KEY_PROVISIONED = "prov";
-static constexpr const char *KEY_DEVICE_ID = "dev_id";
+static constexpr const char *KEY_SENSOR_ID = "sensor_id";
 static constexpr const char *KEY_SSID = "ssid";
 static constexpr const char *KEY_PASSWORD = "pass";
 static constexpr const char *KEY_MQTT_URI = "mqtt_uri";
+static constexpr const char *KEY_REGISTRATION_TOKEN = "reg_token";
 
 static void copy_string(char *destination, size_t destination_size, const char *source)
 {
@@ -45,7 +46,7 @@ esp_err_t app_config_validate(const app_device_config_t *config)
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (config->device_id[0] == '\0' || config->ssid[0] == '\0' || config->mqtt_uri[0] == '\0')
+    if (config->sensor_id[0] == '\0' || config->ssid[0] == '\0' || config->mqtt_uri[0] == '\0')
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -60,7 +61,7 @@ esp_err_t app_config_save(const app_device_config_t *config)
     nvs_handle_t handle;
     ESP_RETURN_ON_ERROR(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle), "ConfigStore", "nvs_open failed");
 
-    esp_err_t err = nvs_set_str(handle, KEY_DEVICE_ID, config->device_id);
+    esp_err_t err = nvs_set_str(handle, KEY_SENSOR_ID, config->sensor_id);
     if (err == ESP_OK)
     {
         err = nvs_set_str(handle, KEY_SSID, config->ssid);
@@ -72,6 +73,10 @@ esp_err_t app_config_save(const app_device_config_t *config)
     if (err == ESP_OK)
     {
         err = nvs_set_str(handle, KEY_MQTT_URI, config->mqtt_uri);
+    }
+    if (err == ESP_OK)
+    {
+        err = nvs_set_str(handle, KEY_REGISTRATION_TOKEN, config->registration_token);
     }
     if (err == ESP_OK)
     {
@@ -98,12 +103,13 @@ esp_err_t app_config_load(app_device_config_t *config)
 
     *config = {};
 
-    size_t device_id_len = sizeof(config->device_id);
+    size_t sensor_id_len = sizeof(config->sensor_id);
     size_t ssid_len = sizeof(config->ssid);
     size_t password_len = sizeof(config->password);
     size_t mqtt_uri_len = sizeof(config->mqtt_uri);
+    size_t registration_token_len = sizeof(config->registration_token);
 
-    esp_err_t err = nvs_get_str(handle, KEY_DEVICE_ID, config->device_id, &device_id_len);
+    esp_err_t err = nvs_get_str(handle, KEY_SENSOR_ID, config->sensor_id, &sensor_id_len);
     if (err == ESP_OK)
     {
         err = nvs_get_str(handle, KEY_SSID, config->ssid, &ssid_len);
@@ -116,15 +122,25 @@ esp_err_t app_config_load(app_device_config_t *config)
     {
         err = nvs_get_str(handle, KEY_MQTT_URI, config->mqtt_uri, &mqtt_uri_len);
     }
+    if (err == ESP_OK)
+    {
+        err = nvs_get_str(handle, KEY_REGISTRATION_TOKEN, config->registration_token, &registration_token_len);
+        if (err == ESP_ERR_NVS_NOT_FOUND)
+        {
+            config->registration_token[0] = '\0';
+            err = ESP_OK;
+        }
+    }
 
     nvs_close(handle);
 
     if (err == ESP_OK)
     {
-        copy_string(config->device_id, sizeof(config->device_id), config->device_id);
+        copy_string(config->sensor_id, sizeof(config->sensor_id), config->sensor_id);
         copy_string(config->ssid, sizeof(config->ssid), config->ssid);
         copy_string(config->password, sizeof(config->password), config->password);
         copy_string(config->mqtt_uri, sizeof(config->mqtt_uri), config->mqtt_uri);
+        copy_string(config->registration_token, sizeof(config->registration_token), config->registration_token);
 
         return app_config_validate(config);
     }

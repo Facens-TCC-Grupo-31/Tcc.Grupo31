@@ -22,21 +22,40 @@ static constexpr const char *TELEMETRY_TOPIC = "devices/samples";
 
 struct SampleData
 {
-    uint32_t timestamp;
-    int32_t value;
+    float fill_level;
 };
 
 class SimpleSampler : public Reader<SampleData>
 {
-    int counter = 0;
+    float fill_level_ = 0.0f;
+    bool increasing_ = true;
 
 public:
     std::optional<SampleData> read() override
     {
         SampleData data;
-        data.timestamp = xTaskGetTickCount();
-        data.value = counter++;
-        ESP_LOGI(TAG, "Sampled value: %ld at tick: %lu", data.value, data.timestamp);
+        data.fill_level = fill_level_;
+
+        if (increasing_)
+        {
+            fill_level_ += 0.1f;
+            if (fill_level_ >= 1.0f)
+            {
+                fill_level_ = 1.0f;
+                increasing_ = false;
+            }
+        }
+        else
+        {
+            fill_level_ -= 0.1f;
+            if (fill_level_ <= 0.0f)
+            {
+                fill_level_ = 0.0f;
+                increasing_ = true;
+            }
+        }
+
+        ESP_LOGI(TAG, "Sampled fill level: %.2f", data.fill_level);
         return data;
     }
 };
@@ -47,7 +66,7 @@ class MqttSampleGateway : public Gateway<SampleData>
     std::atomic<bool> connected_{false};
     app_context_t *context_ = nullptr;
     char broker_uri_[APP_CONFIG_MQTT_URI_MAX + 1] = {};
-    char device_id_[APP_CONFIG_DEVICE_ID_MAX + 1] = {};
+    char sensor_id_[APP_CONFIG_SENSOR_ID_MAX + 1] = {};
     char registration_token_[APP_RUNTIME_TOKEN_MAX + 1] = {};
     bool has_registration_token_ = false;
 
@@ -106,7 +125,7 @@ public:
         : context_(context)
     {
         std::strncpy(broker_uri_, context->config.mqtt_uri, sizeof(broker_uri_) - 1);
-        std::strncpy(device_id_, context->config.device_id, sizeof(device_id_) - 1);
+        std::strncpy(sensor_id_, context->config.sensor_id, sizeof(sensor_id_) - 1);
         has_registration_token_ = context->has_registration_token;
         if (has_registration_token_)
         {
@@ -142,11 +161,11 @@ public:
 
         if (has_registration_token_)
         {
-            char registration_payload[APP_CONFIG_DEVICE_ID_MAX + APP_RUNTIME_TOKEN_MAX + 48] = {};
+            char registration_payload[APP_CONFIG_SENSOR_ID_MAX + APP_RUNTIME_TOKEN_MAX + 64] = {};
             std::snprintf(registration_payload,
                           sizeof(registration_payload),
-                          "{\"deviceId\":\"%s\",\"token\":\"%s\"}",
-                          device_id_,
+                          "{\"sensorId\":%s,\"provisioningToken\":\"%s\"}",
+                          sensor_id_,
                           registration_token_);
 
             const int registration_message_id = esp_mqtt_client_publish(client_, REGISTRATION_TOPIC, registration_payload, 0, 1, 0);
@@ -157,32 +176,37 @@ public:
                 {
                     context_->has_registration_token = false;
                     context_->registration_token[0] = '\0';
+                    context_->config.registration_token[0] = '\0';
+                    const esp_err_t persist_err = app_config_save(&context_->config);
+                    if (persist_err != ESP_OK)
+                    {
+                        ESP_LOGE(TAG, "Failed to clear persisted registration token: %s", esp_err_to_name(persist_err));
+                    }
                 }
-                ESP_LOGI(TAG, "Published one-shot registration for device %s", device_id_);
+                ESP_LOGI(TAG, "Published one-shot registration for sensor %s", sensor_id_);
                 return;
             }
 
-            ESP_LOGE(TAG, "Failed to publish one-shot registration for device %s", device_id_);
+            ESP_LOGE(TAG, "Failed to publish one-shot registration for sensor %s", sensor_id_);
             return;
         }
 
-        char telemetry_payload[APP_CONFIG_DEVICE_ID_MAX + 96] = {};
+        char telemetry_payload[APP_CONFIG_SENSOR_ID_MAX + 48] = {};
         std::snprintf(telemetry_payload,
                       sizeof(telemetry_payload),
-                      "{\"deviceId\":\"%s\",\"timestamp\":%lu,\"value\":%ld}",
-                      device_id_,
-                      static_cast<unsigned long>(data.timestamp),
-                      static_cast<long>(data.value));
+                      "{\"sensorId\":%s,\"fillLevel\":%.3f}",
+                      sensor_id_,
+                      static_cast<double>(data.fill_level));
 
         const int message_id = esp_mqtt_client_publish(client_, TELEMETRY_TOPIC, telemetry_payload, 0, 1, 0);
 
         if (message_id >= 0)
         {
-            ESP_LOGI(TAG, "Published telemetry value %ld for device %s", data.value, device_id_);
+            ESP_LOGI(TAG, "Published telemetry fill level %.2f for sensor %s", data.fill_level, sensor_id_);
             return;
         }
 
-        ESP_LOGE(TAG, "Failed to publish telemetry value %ld for device %s", data.value, device_id_);
+        ESP_LOGE(TAG, "Failed to publish telemetry fill level %.2f for sensor %s", data.fill_level, sensor_id_);
     }
 };
 

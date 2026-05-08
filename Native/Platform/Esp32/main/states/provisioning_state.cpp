@@ -45,6 +45,12 @@ static void run(app_context_t *context)
         return;
     }
 
+    payload.config.registration_token[0] = '\0';
+    if (payload.has_token)
+    {
+        copy_string(payload.config.registration_token, sizeof(payload.config.registration_token), payload.token);
+    }
+
     const esp_err_t save_err = app_config_save(&payload.config);
     if (save_err != ESP_OK)
     {
@@ -60,7 +66,7 @@ static void run(app_context_t *context)
         copy_string(context->registration_token, sizeof(context->registration_token), payload.token);
     }
 
-    ESP_LOGI(TAG, "Provisioning complete for device %s", context->config.device_id);
+    ESP_LOGI(TAG, "Provisioning complete for sensor %s", context->config.sensor_id);
     if (app_dispatcher_post_event(context, APP_EVENT_PROVISIONING_DONE) != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to post APP_EVENT_PROVISIONING_DONE");
