@@ -20,3 +20,7 @@ bool provisioning_transport_try_get_payload(provisioning_payload_t *payload);
 // Temporary integration seam for BLE callback glue. The real BLE GATT/protocomm
 // handler should call this once a full payload is parsed and validated for shape.
 esp_err_t provisioning_transport_submit_ble_payload(const provisioning_payload_t *payload);
+
+// Update the BLE status characteristic after provisioning state has processed the config save.
+// Call with esp_err_t result from app_config_save() to report success or failure.
+void provisioning_transport_set_final_status(esp_err_t config_save_result);

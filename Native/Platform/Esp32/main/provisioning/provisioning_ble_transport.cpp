@@ -171,6 +171,20 @@ static void set_status(const char *message)
     copy_string(s_status_value, sizeof(s_status_value), message);
 }
 
+void provisioning_transport_set_final_status(esp_err_t config_save_result)
+{
+    if (config_save_result == ESP_OK)
+    {
+        set_status("ok:accepted");
+    }
+    else
+    {
+        char error_msg[96] = {};
+        std::snprintf(error_msg, sizeof(error_msg), "error:save_failed (%s)", esp_err_to_name(config_save_result));
+        set_status(error_msg);
+    }
+}
+
 static const char *skip_spaces(const char *cursor)
 {
     while (cursor != nullptr && *cursor != '\0' && std::isspace(static_cast<unsigned char>(*cursor)) != 0)
@@ -307,7 +321,12 @@ static bool parse_payload_json(const char *json, provisioning_payload_t *payload
         return false;
     }
 
-    parsed.has_token = extract_json_string(json, "provisioningToken", parsed.token, sizeof(parsed.token));
+    if (!extract_json_string(json, "provisioningToken", parsed.token, sizeof(parsed.token)))
+    {
+        ESP_LOGE(TAG, "Provisioning token is required but was not provided in payload");
+        return false;
+    }
+    parsed.has_token = true;
     *payload = parsed;
     return true;
 }

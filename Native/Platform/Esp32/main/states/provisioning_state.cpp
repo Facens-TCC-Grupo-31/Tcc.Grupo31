@@ -52,6 +52,7 @@ static void run(app_context_t *context)
     }
 
     const esp_err_t save_err = app_config_save(&payload.config);
+    provisioning_transport_set_final_status(save_err);
     if (save_err != ESP_OK)
     {
         ESP_LOGE(TAG, "Rejected provisioning payload: %s", esp_err_to_name(save_err));
