@@ -10,6 +10,7 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 
 #include <nimble/nimble_port.h>
 #include <nimble/nimble_port_freertos.h>
@@ -26,14 +27,15 @@ static bool s_ble_advertising = false;
 static bool s_ble_synced = false;
 static bool s_should_advertise = false;
 static bool s_gatt_initialized = false;
+static SemaphoreHandle_t s_ble_host_stopped = nullptr;
 
-static constexpr size_t REASSEMBLY_BUFFER_SIZE = 1024;
+static constexpr size_t REASSEMBLY_BUFFER_SIZE = 512;
 static constexpr TickType_t CHUNK_TIMEOUT_TICKS = pdMS_TO_TICKS(2000);
 static char s_reassembly_buffer[REASSEMBLY_BUFFER_SIZE] = {};
 static size_t s_reassembly_length = 0;
 static TickType_t s_last_chunk_tick = 0;
 
-static char s_status_value[96] = "idle";
+static const char *s_status_value = "idle";
 
 static constexpr uint8_t PROVISIONING_SERVICE_UUID[16] = {
     0x41, 0x20, 0x93, 0x44, 0xA8, 0x1D, 0x4B, 0x9E,
@@ -168,21 +170,12 @@ static void init_gatt_layout(void)
 
 static void set_status(const char *message)
 {
-    copy_string(s_status_value, sizeof(s_status_value), message);
+    s_status_value = message;
 }
 
 void provisioning_transport_set_final_status(esp_err_t config_save_result)
 {
-    if (config_save_result == ESP_OK)
-    {
-        set_status("ok:accepted");
-    }
-    else
-    {
-        char error_msg[96] = {};
-        std::snprintf(error_msg, sizeof(error_msg), "error:save_failed (%s)", esp_err_to_name(config_save_result));
-        set_status(error_msg);
-    }
+    set_status(config_save_result == ESP_OK ? "ok:accepted" : "error:save_failed");
 }
 
 static const char *skip_spaces(const char *cursor)
@@ -356,7 +349,7 @@ static int gatt_access_cb(uint16_t, uint16_t, struct ble_gatt_access_ctxt *ctxt,
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    char buffer[512] = {};
+    char buffer[256] = {};
     uint16_t actual_len = 0;
     const int flatten_rc = ble_hs_mbuf_to_flat(ctxt->om, buffer, sizeof(buffer) - 1, &actual_len);
     if (flatten_rc != 0)
@@ -521,6 +514,10 @@ static void on_sync(void)
 static void host_task(void *)
 {
     nimble_port_run();
+    if (s_ble_host_stopped != nullptr)
+    {
+        xSemaphoreGive(s_ble_host_stopped);
+    }
     nimble_port_freertos_deinit();
 }
 
@@ -529,6 +526,16 @@ static esp_err_t ensure_ble_initialized(void)
     if (s_ble_initialized)
     {
         return ESP_OK;
+    }
+
+    if (s_ble_host_stopped == nullptr)
+    {
+        s_ble_host_stopped = xSemaphoreCreateBinary();
+        if (s_ble_host_stopped == nullptr)
+        {
+            ESP_LOGE(TAG, "Failed to create BLE deinit semaphore");
+            return ESP_ERR_NO_MEM;
+        }
     }
 
     ESP_LOGI(TAG, "[BLE-INIT] free=%lu min=%lu largest=%lu",
@@ -602,6 +609,24 @@ esp_err_t provisioning_transport_stop_ble(void)
     s_has_pending_payload = false;
     s_pending_payload = {};
     set_status("stopped");
+
+    if (s_ble_initialized)
+    {
+        nimble_port_stop();
+        if (s_ble_host_stopped != nullptr)
+        {
+            xSemaphoreTake(s_ble_host_stopped, pdMS_TO_TICKS(3000));
+        }
+        (void)nimble_port_deinit();
+        (void)esp_bt_mem_release(ESP_BT_MODE_BTDM);
+        s_ble_initialized = false;
+        s_ble_synced = false;
+        s_gatt_initialized = false;
+        ESP_LOGI(TAG, "[BLE-RELEASE] free=%lu min=%lu",
+                 (unsigned long)esp_get_free_heap_size(),
+                 (unsigned long)esp_get_minimum_free_heap_size());
+    }
+
     return ESP_OK;
 }
 
