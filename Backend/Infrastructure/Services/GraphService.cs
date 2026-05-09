@@ -33,9 +33,9 @@ internal sealed class GraphService(
         await EnsureLoadedAsync(ct);
 
         if (Edges.Count == 0)
-            return await InsertIsolatedNodeAsync(latitude, longitude, applyMutation, ct);
+            return await InsertIsolatedNodeAsync(longitude, latitude, applyMutation, ct);
 
-        var (edge, px, py) = FindNearestEdge(latitude, longitude);
+        var (edge, px, py) = FindNearestEdge(longitude, latitude);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
