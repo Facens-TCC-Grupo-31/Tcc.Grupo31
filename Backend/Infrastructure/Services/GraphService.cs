@@ -17,11 +17,44 @@ internal sealed class GraphService(
     private static bool _loaded;
     private static readonly Dictionary<int, GraphNode> Nodes = [];
     private static readonly Dictionary<int, GraphEdge> Edges = [];
+    private static readonly Dictionary<int, List<GraphEdge>> OutgoingEdgesByNode = [];
 
     public IDisposable? TryAcquireWriteLock()
     {
         bool acquired = WriteLock.Wait(LockTimeout);
         return acquired ? new LockHandle(WriteLock) : null;
+    }
+
+    public async Task<GraphStats> GetGraphStatsAsync(CancellationToken ct = default)
+    {
+        await EnsureLoadedAsync(ct);
+
+        lock (CacheLock)
+        {
+            return new GraphStats(Nodes.Count, Edges.Count);
+        }
+    }
+
+    public async Task<GraphSnapshot> GetGraphSnapshotAsync(CancellationToken ct = default)
+    {
+        await EnsureLoadedAsync(ct);
+
+        lock (CacheLock)
+        {
+            IReadOnlyCollection<int> nodeIds = Nodes.Keys
+                .OrderBy(nodeId => nodeId)
+                .ToList();
+
+            var adjacency = OutgoingEdgesByNode.ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyList<GraphNeighbor>)kvp.Value
+                    .Select(edge => new GraphNeighbor(edge.ToNodeId, edge.Id, edge.Distance))
+                    .OrderBy(neighbor => neighbor.ToNodeId)
+                    .ThenBy(neighbor => neighbor.EdgeId)
+                    .ToList());
+
+            return new GraphSnapshot(nodeIds, adjacency);
+        }
     }
 
     public async Task<int> ApplyNearestEdgeSplitAsync(
@@ -44,6 +77,11 @@ internal sealed class GraphService(
         if (edgeEntity is null)
             throw new InvalidOperationException($"Nearest edge {edge.Id} no longer exists.");
 
+        GraphEdge? reverseEdgeEntity = await db.GraphEdges
+            .SingleOrDefaultAsync(
+                e => e.FromNodeId == edge.ToNodeId && e.ToNodeId == edge.FromNodeId,
+                ct);
+
         GraphNode fromNode = Nodes[edge.FromNodeId];
         GraphNode toNode = Nodes[edge.ToNodeId];
 
@@ -64,8 +102,32 @@ internal sealed class GraphService(
             Distance = Distance(newNode.X, newNode.Y, toNode.X, toNode.Y)
         };
 
-        db.GraphEdges.Remove(edgeEntity);
-        db.GraphEdges.AddRange(edge1, edge2);
+        var newEdges = new List<GraphEdge> { edge1, edge2 };
+        var edgesToRemove = new List<GraphEdge> { edgeEntity };
+
+        if (reverseEdgeEntity is not null)
+        {
+            var edge3 = new GraphEdge
+            {
+                FromNodeId = toNode.Id,
+                ToNodeId = newNode.Id,
+                Distance = Distance(toNode.X, toNode.Y, newNode.X, newNode.Y)
+            };
+
+            var edge4 = new GraphEdge
+            {
+                FromNodeId = newNode.Id,
+                ToNodeId = fromNode.Id,
+                Distance = Distance(newNode.X, newNode.Y, fromNode.X, fromNode.Y)
+            };
+
+            newEdges.Add(edge3);
+            newEdges.Add(edge4);
+            edgesToRemove.Add(reverseEdgeEntity);
+        }
+
+        db.GraphEdges.RemoveRange(edgesToRemove);
+        db.GraphEdges.AddRange(newEdges);
         await db.SaveChangesAsync(ct);
 
         await applyMutation(newNode.Id);
@@ -75,9 +137,18 @@ internal sealed class GraphService(
         lock (CacheLock)
         {
             Nodes[newNode.Id] = newNode;
-            Edges.Remove(edge.Id);
-            Edges[edge1.Id] = edge1;
-            Edges[edge2.Id] = edge2;
+
+            foreach (GraphEdge edgeToRemove in edgesToRemove)
+            {
+                Edges.Remove(edgeToRemove.Id);
+                RemoveEdgeFromAdjacency(edgeToRemove);
+            }
+
+            foreach (GraphEdge newEdge in newEdges)
+            {
+                Edges[newEdge.Id] = newEdge;
+                AddEdgeToAdjacency(newEdge);
+            }
         }
 
         logger.LogInformation(
@@ -95,7 +166,16 @@ internal sealed class GraphService(
     {
         if (_loaded)
         {
-            return;
+            bool cacheValid = await IsCacheStillValidAsync(ct);
+            if (cacheValid)
+            {
+                return;
+            }
+
+            lock (CacheLock)
+            {
+                _loaded = false;
+            }
         }
 
         List<GraphNode> nodes = await db.GraphNodes.AsNoTracking().ToListAsync(ct);
@@ -108,13 +188,46 @@ internal sealed class GraphService(
 
             Nodes.Clear();
             Edges.Clear();
+            OutgoingEdgesByNode.Clear();
 
             foreach (GraphNode node in nodes)
                 Nodes[node.Id] = node;
             foreach (GraphEdge edge in edges)
+            {
                 Edges[edge.Id] = edge;
+                AddEdgeToAdjacency(edge);
+            }
 
             _loaded = true;
+        }
+    }
+
+    private async Task<bool> IsCacheStillValidAsync(CancellationToken ct)
+    {
+        int dbNodeCount = await db.GraphNodes.AsNoTracking().CountAsync(ct);
+        int dbEdgeCount = await db.GraphEdges.AsNoTracking().CountAsync(ct);
+
+        int dbMaxNodeId = await db.GraphNodes
+            .AsNoTracking()
+            .Select(n => (int?)n.Id)
+            .MaxAsync(ct) ?? 0;
+
+        int dbMaxEdgeId = await db.GraphEdges
+            .AsNoTracking()
+            .Select(e => (int?)e.Id)
+            .MaxAsync(ct) ?? 0;
+
+        lock (CacheLock)
+        {
+            int cacheNodeCount = Nodes.Count;
+            int cacheEdgeCount = Edges.Count;
+            int cacheMaxNodeId = cacheNodeCount == 0 ? 0 : Nodes.Keys.Max();
+            int cacheMaxEdgeId = cacheEdgeCount == 0 ? 0 : Edges.Keys.Max();
+
+            return cacheNodeCount == dbNodeCount
+                && cacheEdgeCount == dbEdgeCount
+                && cacheMaxNodeId == dbMaxNodeId
+                && cacheMaxEdgeId == dbMaxEdgeId;
         }
     }
 
@@ -134,7 +247,10 @@ internal sealed class GraphService(
         await tx.CommitAsync(ct);
 
         lock (CacheLock)
+        {
             Nodes[node.Id] = node;
+            OutgoingEdgesByNode.TryAdd(node.Id, []);
+        }
 
         logger.LogInformation("Graph initialized with first node {NodeId}", node.Id);
         return node.Id;
@@ -199,6 +315,32 @@ internal sealed class GraphService(
 
     private static double Distance(double x1, double y1, double x2, double y2)
         => Math.Sqrt(DistSq(x1, y1, x2, y2));
+
+    private static void AddEdgeToAdjacency(GraphEdge edge)
+    {
+        if (!OutgoingEdgesByNode.TryGetValue(edge.FromNodeId, out List<GraphEdge>? edges))
+        {
+            edges = [];
+            OutgoingEdgesByNode[edge.FromNodeId] = edges;
+        }
+
+        edges.Add(edge);
+        edges.Sort((a, b) =>
+        {
+            int toCompare = a.ToNodeId.CompareTo(b.ToNodeId);
+            return toCompare != 0 ? toCompare : a.Id.CompareTo(b.Id);
+        });
+    }
+
+    private static void RemoveEdgeFromAdjacency(GraphEdge edge)
+    {
+        if (!OutgoingEdgesByNode.TryGetValue(edge.FromNodeId, out List<GraphEdge>? edges))
+        {
+            return;
+        }
+
+        edges.RemoveAll(e => e.Id == edge.Id);
+    }
 
     private sealed class LockHandle(SemaphoreSlim semaphore) : IDisposable
     {

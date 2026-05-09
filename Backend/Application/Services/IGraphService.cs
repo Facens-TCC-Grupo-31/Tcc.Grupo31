@@ -4,6 +4,10 @@ public interface IGraphService
 {
     IDisposable? TryAcquireWriteLock();
 
+    Task<GraphStats> GetGraphStatsAsync(CancellationToken ct = default);
+
+    Task<GraphSnapshot> GetGraphSnapshotAsync(CancellationToken ct = default);
+
     Task<int> ApplyNearestEdgeSplitAsync(
         double latitude,
         double longitude,
@@ -11,3 +15,11 @@ public interface IGraphService
         CancellationToken ct = default
     );
 }
+
+public sealed record GraphStats(int NodeCount, int EdgeCount);
+
+public sealed record GraphNeighbor(int ToNodeId, int EdgeId, double Distance);
+
+public sealed record GraphSnapshot(
+    IReadOnlyCollection<int> NodeIds,
+    IReadOnlyDictionary<int, IReadOnlyList<GraphNeighbor>> AdjacencyByNode);

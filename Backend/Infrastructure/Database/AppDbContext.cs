@@ -9,6 +9,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
     public DbSet<GraphNode> GraphNodes => Set<GraphNode>();
     public DbSet<GraphEdge> GraphEdges => Set<GraphEdge>();
+    public DbSet<DepotNodeMapping> DepotNodeMappings => Set<DepotNodeMapping>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +66,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.HasIndex(edge => edge.ToNodeId);
 
             e.HasIndex(edge => new { edge.FromNodeId, edge.ToNodeId }).IsUnique();
+        });
+
+        modelBuilder.Entity<DepotNodeMapping>(e =>
+        {
+            e.HasKey(mapping => mapping.Id);
+
+            e.Property(mapping => mapping.Id).UseIdentityAlwaysColumn();
+
+            e.Property(mapping => mapping.DepotKey).HasMaxLength(128);
+            e.Property(mapping => mapping.GraphSignature).HasMaxLength(128);
+
+            e.Property(mapping => mapping.CreatedAt).HasDefaultValueSql("now()");
+
+            e.HasIndex(mapping => new { mapping.DepotKey, mapping.GraphSignature }).IsUnique();
+
+            e.HasOne(mapping => mapping.Node)
+             .WithMany()
+             .HasForeignKey(mapping => mapping.NodeId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

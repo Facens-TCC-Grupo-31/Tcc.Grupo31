@@ -5,6 +5,7 @@ using Infrastructure.Database;
 using Infrastructure.Services.DependencyInjection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -17,10 +18,20 @@ public sealed class SensorRegistrationFlowTests
         await connection.OpenAsync();
 
         var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Routing:DepotKey"] = "test",
+                ["Routing:DepotLatitude"] = "-23.47",
+                ["Routing:DepotLongitude"] = "-47.43",
+                ["Routing:FillThreshold"] = "0.8"
+            })
+            .Build();
+
         services.AddLogging();
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
         services.AddSingleton<IProvisioningDataCache, InMemoryProvisioningDataCache>();
-        services.AddServices();
+        services.AddServices(configuration);
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
