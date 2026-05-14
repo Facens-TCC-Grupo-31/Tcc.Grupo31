@@ -2,6 +2,7 @@
 
 #include "Reader.h"
 #include "Gateway.h"
+#include <atomic>
 #include <memory>
 
 template <typename TData>

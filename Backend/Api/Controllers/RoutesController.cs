@@ -12,7 +12,7 @@ public sealed class RoutesController(ICollectionRoutingService collectionRouting
     [ProducesResponseType<CollectionRouteResponseDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetCollectionRoute(CancellationToken ct)
     {
-        CollectionRouteResponseDto route = await collectionRoutingService.GenerateRouteAsync(ct);
-        return Ok(route);
+        //CollectionRouteResponseDto route = await collectionRoutingService.GenerateRouteAsync(ct);
+        return Ok(new CollectionRouteResponseDto() { DepotCoordinates = new Position(0, 0), OrderedNodeCoordinates = [], RouteGenerationMs = 0, TotalDistance = 0 });
     }
 }

@@ -1,6 +1,8 @@
+using Domain.Entities;
+
 namespace Application.Common.Dtos;
 
-public sealed class CollectionRouteResponseDto
+public sealed class CollectionRouteResponseDtoV1
 {
     public required int DepotNodeId { get; init; }
     public required IReadOnlyList<int> NodeVisitOrder { get; init; }
@@ -18,3 +20,14 @@ public sealed class CollectionRouteResponseDto
     public required double MatrixGenerationMs { get; init; }
     public required double RouteGenerationMs { get; init; }
 }
+
+public sealed class CollectionRouteResponseDto
+{
+    public required Position DepotCoordinates { get; init; }
+    public required IReadOnlyList<Position> OrderedNodeCoordinates { get; init; }
+
+    public required double TotalDistance { get; init; }
+    public required double RouteGenerationMs { get; init; }
+}
+
+public record Position(double Latitude, double Longitude);

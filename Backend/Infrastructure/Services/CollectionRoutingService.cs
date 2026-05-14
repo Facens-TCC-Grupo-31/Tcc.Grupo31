@@ -14,7 +14,7 @@ internal sealed class CollectionRoutingService(
 {
     private readonly RoutingOptions _options = options.Value;
 
-    public async Task<CollectionRouteResponseDto> GenerateRouteAsync(CancellationToken ct = default)
+    public async Task<CollectionRouteResponseDtoV1> GenerateRouteAsync(CancellationToken ct = default)
     {
         var totalSw = Stopwatch.StartNew();
 
@@ -27,7 +27,7 @@ internal sealed class CollectionRoutingService(
 
         totalSw.Stop();
 
-        return new CollectionRouteResponseDto
+        return new CollectionRouteResponseDtoV1
         {
             DepotNodeId = depotNodeId,
             NodeVisitOrder = planningResult.NodeVisitOrder,
