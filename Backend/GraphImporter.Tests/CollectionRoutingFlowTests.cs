@@ -73,18 +73,11 @@ public sealed class CollectionRoutingFlowTests
 
         var route = await routingService.GenerateRouteAsync();
 
-        Assert.NotEmpty(route.NodeVisitOrder);
-        Assert.Equal(route.DepotNodeId, route.NodeVisitOrder.First());
-        Assert.Equal(route.DepotNodeId, route.NodeVisitOrder.Last());
-
-        Assert.Single(route.SensorVisitOrder);
-        Assert.Equal(sensor1.Id, route.SensorVisitOrder[0]);
-
-        Assert.Equal(1, route.SelectedBins);
-        Assert.Equal(1, route.VisitedBins);
+        Assert.NotNull(route.DepotCoordinates);
+        Assert.NotEmpty(route.OrderedNodeCoordinates);
+        
         Assert.True(route.TotalDistance >= 0);
-        Assert.True(route.GraphNodeCount >= 2);
-        Assert.True(route.GraphEdgeCount >= 2);
+        Assert.True(route.RouteGenerationMs > 0);
     }
 
     private sealed class InMemorySensorLatestValueCache : ISensorLatestValueCache

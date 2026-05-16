@@ -2,6 +2,7 @@ using Application.Cache;
 using Application.Common.Dtos;
 using Application.Services;
 using Domain.Entities;
+using Domain.ValueObjects;
 using Infrastructure.Database;
 using Microsoft.Extensions.Logging;
 
@@ -14,7 +15,8 @@ internal sealed class SensorRegistrationService(
     ILogger<SensorRegistrationService> logger) : ISensorRegistrationService
 {
     public async Task<RegistrationResponseDto> RequestRegistrationAsync(
-        double latitude, double longitude, CancellationToken ct = default)
+        Position position,
+        CancellationToken ct = default)
     {
         var sensor = new Sensor
         {
@@ -28,14 +30,14 @@ internal sealed class SensorRegistrationService(
         string token = Guid.NewGuid().ToString();
         await provisioningDataCache.SetAsync(
             sensor.Id,
-            new ProvisioningRegistrationContext(token, latitude, longitude),
+            new ProvisioningRegistrationContext(token, position),
             ct);
 
         logger.LogInformation(
             "Registration requested for sensor {SensorId} at ({Lat},{Lon})",
             sensor.Id,
-            latitude,
-            longitude
+            position.Latitude,
+            position.Longitude
         );
 
         return new RegistrationResponseDto
@@ -84,8 +86,7 @@ internal sealed class SensorRegistrationService(
         try
         {
             await graphService.ApplyNearestEdgeSplitAsync(
-                registrationContext.Latitude,
-                registrationContext.Longitude,
+                registrationContext.Position,
                 async newNodeId =>
                 {
                     sensor.IsActive = true;

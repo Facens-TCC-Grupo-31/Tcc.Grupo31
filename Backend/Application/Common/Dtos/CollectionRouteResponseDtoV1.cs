@@ -1,4 +1,4 @@
-using Domain.Entities;
+using Domain.ValueObjects;
 
 namespace Application.Common.Dtos;
 
@@ -29,5 +29,3 @@ public sealed class CollectionRouteResponseDto
     public required double TotalDistance { get; init; }
     public required double RouteGenerationMs { get; init; }
 }
-
-public record Position(double Latitude, double Longitude);

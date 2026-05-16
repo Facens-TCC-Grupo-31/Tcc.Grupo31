@@ -1,5 +1,6 @@
 using Application.Services;
 using Domain.Entities;
+using Domain.ValueObjects;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -58,17 +59,16 @@ internal sealed class GraphService(
     }
 
     public async Task<int> ApplyNearestEdgeSplitAsync(
-        double latitude,
-        double longitude,
+        Position position,
         Func<int, Task> applyMutation,
         CancellationToken ct = default)
     {
         await EnsureLoadedAsync(ct);
 
         if (Edges.Count == 0)
-            return await InsertIsolatedNodeAsync(longitude, latitude, applyMutation, ct);
+            return await InsertIsolatedNodeAsync(position.Longitude, position.Latitude, applyMutation, ct);
 
-        var (edge, px, py) = FindNearestEdge(longitude, latitude);
+        var (edge, px, py) = FindNearestEdge(position.Longitude, position.Latitude);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 

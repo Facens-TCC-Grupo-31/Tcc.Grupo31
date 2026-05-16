@@ -1,5 +1,6 @@
 using Application.Services;
 using Domain.Entities;
+using Domain.ValueObjects;
 using Infrastructure.Database;
 using Infrastructure.Services.Configuration;
 using Microsoft.EntityFrameworkCore;
@@ -62,8 +63,7 @@ internal sealed class DepotNodeService(
         }
 
         int nodeId = await graphService.ApplyNearestEdgeSplitAsync(
-            _options.DepotLatitude,
-            _options.DepotLongitude,
+            new Position(_options.DepotLatitude, _options.DepotLongitude),
             async newNodeId =>
             {
                 db.DepotNodeMappings.Add(new DepotNodeMapping

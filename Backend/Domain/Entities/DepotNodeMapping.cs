@@ -1,3 +1,5 @@
+using Domain.ValueObjects;
+
 namespace Domain.Entities;
 
 public sealed class DepotNodeMapping
@@ -9,6 +11,8 @@ public sealed class DepotNodeMapping
 
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+
+    public Position Position => new(Latitude, Longitude);
 
     public int NodeId { get; set; }
     public GraphNode Node { get; set; } = null!;

@@ -1,5 +1,6 @@
 using Application.Common.Dtos;
 using Application.Services;
+using Domain.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
@@ -18,8 +19,7 @@ public sealed class SensorsController(
         CancellationToken ct)
     {
         var result = await registrationService.RequestRegistrationAsync(
-            request.Latitude,
-            request.Longitude,
+            request.Position,
             ct
         );
 

@@ -1,6 +1,8 @@
+using Domain.ValueObjects;
+
 namespace Application.Cache;
 
-public sealed record ProvisioningRegistrationContext(string Token, double Latitude, double Longitude);
+public sealed record ProvisioningRegistrationContext(string Token, Position Position);
 
 public interface IProvisioningDataCache
 {

@@ -1,12 +1,12 @@
 using Application.Common.Dtos;
+using Domain.ValueObjects;
 
 namespace Application.Services;
 
 public interface ISensorRegistrationService
 {
     Task<RegistrationResponseDto> RequestRegistrationAsync(
-        double latitude,
-        double longitude,
+        Position position,
         CancellationToken ct = default
     );
 

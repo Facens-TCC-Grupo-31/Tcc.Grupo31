@@ -1,6 +1,7 @@
 using Application.Cache;
 using Application.Services;
 using Domain.Entities;
+using Domain.ValueObjects;
 using Infrastructure.Database;
 using Infrastructure.Services.DependencyInjection;
 using Microsoft.Data.Sqlite;
@@ -69,7 +70,7 @@ public sealed class SensorRegistrationFlowTests
         var cache = scope.ServiceProvider.GetRequiredService<IProvisioningDataCache>();
         await cache.SetAsync(
             sensor.Id,
-            new ProvisioningRegistrationContext(token, registrationLat, registrationLon));
+            new ProvisioningRegistrationContext(token, new Position(registrationLat, registrationLon)));
 
         var registrationService = scope.ServiceProvider.GetRequiredService<ISensorRegistrationService>();
 

@@ -1,3 +1,5 @@
+using Domain.ValueObjects;
+
 namespace Application.Services;
 
 public interface IGraphService
@@ -9,8 +11,7 @@ public interface IGraphService
     Task<GraphSnapshot> GetGraphSnapshotAsync(CancellationToken ct = default);
 
     Task<int> ApplyNearestEdgeSplitAsync(
-        double latitude,
-        double longitude,
+        Position position,
         Func<int, Task> applyMutation,
         CancellationToken ct = default
     );
