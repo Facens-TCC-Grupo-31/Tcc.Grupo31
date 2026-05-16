@@ -7,7 +7,7 @@ public interface IReadingService
 {
     Task<bool> RegisterReadingAsync(
         long sensorId,
-        float fillLevel,
+        int distanceMm,
         CancellationToken ct = default
     );
 

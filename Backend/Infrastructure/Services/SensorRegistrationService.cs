@@ -50,9 +50,29 @@ internal sealed class SensorRegistrationService(
     public async Task<bool> CompleteRegistrationAsync(
         long sensorId,
         string token,
+        int baselineDistanceMm,
+        short calibrationSampleCount,
         CancellationToken ct = default
     )
     {
+        if (baselineDistanceMm <= 0)
+        {
+            logger.LogWarning(
+                "Invalid baseline distance for sensor {SensorId}: {BaselineDistanceMm}",
+                sensorId,
+                baselineDistanceMm);
+            return false;
+        }
+
+        if (calibrationSampleCount <= 0)
+        {
+            logger.LogWarning(
+                "Invalid calibration sample count for sensor {SensorId}: {CalibrationSampleCount}",
+                sensorId,
+                calibrationSampleCount);
+            return false;
+        }
+
         using IDisposable? writeLock = graphService.TryAcquireWriteLock();
         if (writeLock is null)
         {
@@ -92,6 +112,10 @@ internal sealed class SensorRegistrationService(
                     sensor.IsActive = true;
                     sensor.NodeId = newNodeId;
                     sensor.ActivatedAt = DateTime.UtcNow;
+                    sensor.EmptyDistanceMm = baselineDistanceMm;
+                    sensor.CalibratedAtUtc = DateTime.UtcNow;
+                    sensor.CalibrationSampleCount = calibrationSampleCount;
+                    sensor.CalibrationMethod = "median";
                     await db.SaveChangesAsync(ct);
                 },
                 ct

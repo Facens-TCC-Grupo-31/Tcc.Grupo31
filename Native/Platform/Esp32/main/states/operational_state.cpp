@@ -4,6 +4,8 @@
 #include <optional>
 #include <atomic>
 #include <cstring>
+#include <vector>
+#include <algorithm>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -19,44 +21,105 @@
 static const char *TAG = "OperationalState";
 static constexpr const char *REGISTRATION_TOPIC = "devices/register";
 static constexpr const char *TELEMETRY_TOPIC = "devices/samples";
+static constexpr int TELEMETRY_INTERVAL_MS = 180000;
+static constexpr size_t BURST_SAMPLE_COUNT = 5;
 
 struct SampleData
 {
-    float fill_level;
+    int distance_mm;
+    short burst_sample_count;
 };
 
-class SimpleSampler : public Reader<SampleData>
+class SimpleDistanceSampler : public Reader<SampleData>
 {
-    float fill_level_ = 0.0f;
+    int distance_mm_ = 200;
     bool increasing_ = true;
 
 public:
     std::optional<SampleData> read() override
     {
         SampleData data;
-        data.fill_level = fill_level_;
+        data.distance_mm = distance_mm_;
+        data.burst_sample_count = 1;
 
         if (increasing_)
         {
-            fill_level_ += 0.1f;
-            if (fill_level_ >= 1.0f)
+            distance_mm_ += 3;
+            if (distance_mm_ >= 260)
             {
-                fill_level_ = 1.0f;
+                distance_mm_ = 260;
                 increasing_ = false;
             }
         }
         else
         {
-            fill_level_ -= 0.1f;
-            if (fill_level_ <= 0.0f)
+            distance_mm_ -= 3;
+            if (distance_mm_ <= 140)
             {
-                fill_level_ = 0.0f;
+                distance_mm_ = 140;
                 increasing_ = true;
             }
         }
 
-        ESP_LOGI(TAG, "Sampled fill level: %.2f", data.fill_level);
+        ESP_LOGI(TAG, "Sampled distance: %d mm", data.distance_mm);
         return data;
+    }
+};
+
+class BurstMedianEspFeeder : public EspFeeder<SampleData>
+{
+    size_t burst_sample_count_;
+    int telemetry_interval_ms_;
+
+public:
+    BurstMedianEspFeeder(
+        std::unique_ptr<Reader<SampleData>> reader,
+        std::unique_ptr<Gateway<SampleData>> gateway,
+        size_t burst_sample_count,
+        int telemetry_interval_ms)
+        : EspFeeder<SampleData>(std::move(reader), std::move(gateway)),
+          burst_sample_count_(burst_sample_count),
+          telemetry_interval_ms_(telemetry_interval_ms)
+    {
+    }
+
+protected:
+    std::optional<SampleData> read_cycle_data() override
+    {
+        if (burst_sample_count_ == 0)
+        {
+            return std::nullopt;
+        }
+
+        std::vector<int> distances;
+        distances.reserve(burst_sample_count_);
+
+        for (size_t i = 0; i < burst_sample_count_; ++i)
+        {
+            std::optional<SampleData> sample = reader().read();
+            if (!sample.has_value())
+            {
+                ESP_LOGW(TAG, "Burst acquisition failed at index %d", static_cast<int>(i));
+                return std::nullopt;
+            }
+
+            distances.push_back(sample->distance_mm);
+        }
+
+        std::sort(distances.begin(), distances.end());
+        const int median_distance_mm = distances[distances.size() / 2];
+
+        ESP_LOGI(TAG, "Burst median distance: %d mm from %d samples", median_distance_mm, static_cast<int>(burst_sample_count_));
+
+        return SampleData{
+            .distance_mm = median_distance_mm,
+            .burst_sample_count = static_cast<short>(burst_sample_count_)
+        };
+    }
+
+    int cycle_sleep_ms() const override
+    {
+        return telemetry_interval_ms_;
     }
 };
 
@@ -161,12 +224,14 @@ public:
 
         if (has_registration_token_)
         {
-            char registration_payload[APP_CONFIG_SENSOR_ID_MAX + APP_RUNTIME_TOKEN_MAX + 64] = {};
+            char registration_payload[APP_CONFIG_SENSOR_ID_MAX + APP_RUNTIME_TOKEN_MAX + 128] = {};
             std::snprintf(registration_payload,
                           sizeof(registration_payload),
-                          "{\"sensorId\":%s,\"provisioningToken\":\"%s\"}",
+                          "{\"sensorId\":%s,\"provisioningToken\":\"%s\",\"baselineDistanceMm\":%d,\"calibrationSampleCount\":%d}",
                           sensor_id_,
-                          registration_token_);
+                          registration_token_,
+                          data.distance_mm,
+                          static_cast<int>(data.burst_sample_count));
 
             const int registration_message_id = esp_mqtt_client_publish(client_, REGISTRATION_TOPIC, registration_payload, 0, 1, 0);
             if (registration_message_id >= 0)
@@ -194,19 +259,19 @@ public:
         char telemetry_payload[APP_CONFIG_SENSOR_ID_MAX + 48] = {};
         std::snprintf(telemetry_payload,
                       sizeof(telemetry_payload),
-                      "{\"sensorId\":%s,\"fillLevel\":%.3f}",
+                  "{\"sensorId\":%s,\"distanceMm\":%d}",
                       sensor_id_,
-                      static_cast<double>(data.fill_level));
+                  data.distance_mm);
 
         const int message_id = esp_mqtt_client_publish(client_, TELEMETRY_TOPIC, telemetry_payload, 0, 1, 0);
 
         if (message_id >= 0)
         {
-            ESP_LOGI(TAG, "Published telemetry fill level %.2f for sensor %s", data.fill_level, sensor_id_);
+            ESP_LOGI(TAG, "Published telemetry distance %d mm for sensor %s", data.distance_mm, sensor_id_);
             return;
         }
 
-        ESP_LOGE(TAG, "Failed to publish telemetry fill level %.2f for sensor %s", data.fill_level, sensor_id_);
+        ESP_LOGE(TAG, "Failed to publish telemetry distance %d mm for sensor %s", data.distance_mm, sensor_id_);
     }
 };
 
@@ -224,9 +289,14 @@ static void run(app_context_t *context)
         return;
     }
 
-    auto sampler = std::make_unique<SimpleSampler>();
+    auto sampler = std::make_unique<SimpleDistanceSampler>();
     auto gateway = std::make_unique<MqttSampleGateway>(context);
-    s_feeder = std::make_unique<EspFeeder<SampleData>>(std::move(sampler), std::move(gateway));
+    s_feeder = std::make_unique<BurstMedianEspFeeder>(
+        std::move(sampler),
+        std::move(gateway),
+        BURST_SAMPLE_COUNT,
+        TELEMETRY_INTERVAL_MS
+    );
     s_feeder->start();
     ESP_LOGI(TAG, "Operational workload started");
 }

@@ -74,13 +74,21 @@ public sealed class SensorRegistrationFlowTests
 
         var registrationService = scope.ServiceProvider.GetRequiredService<ISensorRegistrationService>();
 
-        bool ok = await registrationService.CompleteRegistrationAsync(sensor.Id, token);
+        bool ok = await registrationService.CompleteRegistrationAsync(
+            sensor.Id,
+            token,
+            baselineDistanceMm: 200,
+            calibrationSampleCount: 9
+        );
 
         Assert.True(ok);
 
         var updatedSensor = await db.Sensors.SingleAsync(s => s.Id == sensor.Id);
         Assert.True(updatedSensor.IsActive);
         Assert.NotNull(updatedSensor.NodeId);
+        Assert.Equal(200, updatedSensor.EmptyDistanceMm);
+        Assert.Equal((short)9, updatedSensor.CalibrationSampleCount);
+        Assert.Equal("median", updatedSensor.CalibrationMethod);
 
         var nodes = await db.GraphNodes.OrderBy(n => n.Id).ToListAsync();
         var edges = await db.GraphEdges.OrderBy(e => e.Id).ToListAsync();

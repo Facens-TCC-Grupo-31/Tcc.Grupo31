@@ -7,6 +7,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 {
     public DbSet<Sensor> Sensors => Set<Sensor>();
     public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
+    public DbSet<SensorDistanceMeasurement> SensorDistanceMeasurements => Set<SensorDistanceMeasurement>();
     public DbSet<GraphNode> GraphNodes => Set<GraphNode>();
     public DbSet<GraphEdge> GraphEdges => Set<GraphEdge>();
     public DbSet<DepotNodeMapping> DepotNodeMappings => Set<DepotNodeMapping>();
@@ -20,6 +21,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(s => s.Id).UseIdentityAlwaysColumn();
 
             e.Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+
+            e.Property(s => s.CalibrationMethod)
+             .HasMaxLength(32);
 
             e.HasIndex(s => s.NodeId);
 
@@ -47,6 +51,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
              .OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(r => new { r.SensorId, r.Timestamp });
+        });
+
+        modelBuilder.Entity<SensorDistanceMeasurement>(e =>
+        {
+            e.HasKey(r => r.Id);
+
+            e.Property(r => r.Id).UseIdentityAlwaysColumn();
+
+            e.Property(r => r.Source).HasMaxLength(32);
+
+            e.HasOne(r => r.Sensor)
+             .WithMany(s => s.DistanceMeasurements)
+             .HasForeignKey(r => r.SensorId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(r => new { r.SensorId, r.ReceivedAtUtc });
         });
 
         modelBuilder.Entity<GraphNode>(e =>

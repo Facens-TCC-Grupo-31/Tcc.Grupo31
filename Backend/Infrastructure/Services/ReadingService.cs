@@ -13,14 +13,18 @@ internal sealed class ReadingService(
     ISensorLatestValueCache cache,
     ILogger<ReadingService> logger) : IReadingService
 {
+    private const int MaxDistanceMm = 100_000;
+
     public async Task<bool> RegisterReadingAsync(
-        long sensorId, float fillLevel, CancellationToken ct = default)
+        long sensorId, int distanceMm, CancellationToken ct = default)
     {
-        if (fillLevel < 0f || fillLevel > 1f)
+        if (distanceMm <= 0 || distanceMm > MaxDistanceMm)
         {
             logger.LogWarning(
-                "Rejected sample for sensor {SensorId}: fill level {FillLevel} out of range [0,1]",
-                sensorId, fillLevel);
+                "Rejected sample for sensor {SensorId}: distance {DistanceMm} out of range (1..{MaxDistanceMm}]",
+                sensorId,
+                distanceMm,
+                MaxDistanceMm);
             return false;
         }
 
@@ -36,7 +40,27 @@ internal sealed class ReadingService(
             return false;
         }
 
+        if (!sensor.EmptyDistanceMm.HasValue || sensor.EmptyDistanceMm.Value <= 0)
+        {
+            logger.LogWarning(
+                "Rejected sample for sensor {SensorId}: sensor has no calibration baseline",
+                sensorId);
+            return false;
+        }
+
+        float fillLevel = 1f - ((float)distanceMm / sensor.EmptyDistanceMm.Value);
+        fillLevel = Math.Clamp(fillLevel, 0f, 1f);
+
         DateTime now = DateTime.UtcNow;
+
+        var rawMeasurement = new SensorDistanceMeasurement
+        {
+            SensorId = sensorId,
+            DistanceMm = distanceMm,
+            ReceivedAtUtc = now,
+            Source = "mqtt"
+        };
+
         var reading = new SensorReading
         {
             SensorId = sensorId,
@@ -44,6 +68,7 @@ internal sealed class ReadingService(
             Timestamp = now
         };
 
+        db.SensorDistanceMeasurements.Add(rawMeasurement);
         db.SensorReadings.Add(reading);
         await db.SaveChangesAsync(ct);
 

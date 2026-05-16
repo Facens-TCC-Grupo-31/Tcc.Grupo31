@@ -19,10 +19,10 @@ internal class SensorSampleReceivedHandler(
 
     public async Task Handle(HandleSensorSampleReceivedCommand request, CancellationToken cancellationToken)
     {
-        ReadingDto? dto;
+        SensorSampleMessageDto? dto;
         try
         {
-            dto = JsonSerializer.Deserialize<ReadingDto>(
+            dto = JsonSerializer.Deserialize<SensorSampleMessageDto>(
                 request.Payload,
                 _jsonSerializerOptions
             );
@@ -51,13 +51,13 @@ internal class SensorSampleReceivedHandler(
 
         bool ok = await readingService.RegisterReadingAsync(
             dto.SensorId,
-            dto.FillLevel,
+            dto.DistanceMm,
             cancellationToken
         );
         if (!ok)
         {
             logger.LogWarning(
-                "Sample rejected for sensor {SensorId} (inactive or invalid range)",
+                "Sample rejected for sensor {SensorId} (inactive, uncalibrated, or invalid distance)",
                 dto.SensorId
             );
         }

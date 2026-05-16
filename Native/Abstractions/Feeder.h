@@ -14,18 +14,33 @@ private:
 	std::atomic<bool> running_ = false;
 
 protected:
+	Reader<TData>& reader()
+	{
+		return *reader_;
+	}
+
+	virtual std::optional<TData> read_cycle_data()
+	{
+		return reader_->read();
+	}
+
+	virtual int cycle_sleep_ms() const
+	{
+		return 1000;
+	}
+
 	virtual void loop()
 	{
 		while (running_)
 		{
-			auto data = reader_->read();
+			auto data = read_cycle_data();
 			
 			if (data.has_value())
 			{
 				gateway_->send(data.value());
 			}
 
-			sleep_ms(1000);
+			sleep_ms(cycle_sleep_ms());
 		}
 	}
 

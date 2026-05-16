@@ -13,6 +13,8 @@ public interface ISensorRegistrationService
     Task<bool> CompleteRegistrationAsync(
         long sensorId,
         string token,
+        int baselineDistanceMm,
+        short calibrationSampleCount,
         CancellationToken ct = default
     );
 }
