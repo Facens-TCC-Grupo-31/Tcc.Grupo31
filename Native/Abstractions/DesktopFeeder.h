@@ -1,7 +1,8 @@
 #pragma once
-#pragma once
 
-#include <memory>
+#include "Feeder.h"
+
+#include <chrono>
 #include <thread>
 
 template <typename TData>
@@ -13,11 +14,11 @@ private:
 public:
 	using Feeder<TData>::Feeder;
 
-	~ServerFeeder()
+	~ServerFeeder() override
 	{
 		this->stop();
 
-		if (thread_.joinable)
+		if (thread_.joinable())
 		{
 			thread_.join();
 		}
@@ -26,11 +27,14 @@ public:
 protected:
 	void run_async() override
 	{
-		thread_ = std::thread(&Feeder::loop, this);
+		thread_ = std::thread([this]()
+		{
+			this->loop();
+		});
 	}
 
 	void sleep_ms(int ms) override
 	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 	}
 };

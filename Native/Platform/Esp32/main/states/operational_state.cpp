@@ -11,6 +11,9 @@
 #include <freertos/task.h>
 #include <esp_log.h>
 #include <mqtt_client.h>
+#include <driver/gpio.h>
+#include <esp_rom_sys.h>
+#include <esp_timer.h>
 
 #include "Reader.h"
 #include "Gateway.h"
@@ -21,8 +24,11 @@
 static const char *TAG = "OperationalState";
 static constexpr const char *REGISTRATION_TOPIC = "devices/register";
 static constexpr const char *TELEMETRY_TOPIC = "devices/samples";
-static constexpr int TELEMETRY_INTERVAL_MS = 180000;
+static constexpr int TELEMETRY_INTERVAL_MS = 5000;
 static constexpr size_t BURST_SAMPLE_COUNT = 5;
+static constexpr int BURST_INTER_SAMPLE_DELAY_MS = 70;
+static constexpr gpio_num_t HC_SR04_TRIG_PIN = GPIO_NUM_26;
+static constexpr gpio_num_t HC_SR04_ECHO_PIN = GPIO_NUM_25;
 
 struct SampleData
 {
@@ -30,39 +36,143 @@ struct SampleData
     short burst_sample_count;
 };
 
-class SimpleDistanceSampler : public Reader<SampleData>
+class HcSr04DistanceSampler : public Reader<SampleData>
 {
-    int distance_mm_ = 200;
-    bool increasing_ = true;
+    enum class ReadError
+    {
+        None,
+        EchoStuckHighBeforeTrigger,
+        EchoDidNotGoHigh,
+        EchoDidNotGoLow,
+    };
+
+    static constexpr int MAX_READ_ATTEMPTS = 3;
+    static constexpr int64_t ECHO_WAIT_HIGH_TIMEOUT_US = 100000;
+    static constexpr int64_t ECHO_WAIT_LOW_TIMEOUT_US = 60000;
+    static constexpr int64_t ECHO_PRECONDITION_TIMEOUT_US = 5000;
+    static constexpr uint32_t TRIG_PULSE_US = 20;
+    static constexpr uint32_t POST_TRIG_SETTLE_US = 20;
+
+    gpio_num_t trig_pin_;
+    gpio_num_t echo_pin_;
+
+    bool read_distance_mm(int &distance_mm, ReadError &error)
+    {
+        error = ReadError::None;
+
+        int64_t pre_t0 = esp_timer_get_time();
+        while (gpio_get_level(echo_pin_) == 1)
+        {
+            if (esp_timer_get_time() - pre_t0 > ECHO_PRECONDITION_TIMEOUT_US)
+            {
+                error = ReadError::EchoStuckHighBeforeTrigger;
+                return false;
+            }
+        }
+
+        gpio_set_level(trig_pin_, 0);
+        esp_rom_delay_us(2);
+        gpio_set_level(trig_pin_, 1);
+        esp_rom_delay_us(TRIG_PULSE_US);
+        gpio_set_level(trig_pin_, 0);
+        esp_rom_delay_us(POST_TRIG_SETTLE_US);
+
+        int64_t t0 = esp_timer_get_time();
+        while (gpio_get_level(echo_pin_) == 0)
+        {
+            if (esp_timer_get_time() - t0 > ECHO_WAIT_HIGH_TIMEOUT_US)
+            {
+                error = ReadError::EchoDidNotGoHigh;
+                return false;
+            }
+        }
+
+        int64_t start = esp_timer_get_time();
+        while (gpio_get_level(echo_pin_) == 1)
+        {
+            if (esp_timer_get_time() - start > ECHO_WAIT_LOW_TIMEOUT_US)
+            {
+                error = ReadError::EchoDidNotGoLow;
+                return false;
+            }
+        }
+
+        int64_t end = esp_timer_get_time();
+        int64_t pulse_width_us = end - start;
+        float distance_cm = static_cast<float>(pulse_width_us) / 58.0f;
+        distance_mm = static_cast<int>(distance_cm * 10.0f);
+        return distance_mm > 0;
+    }
 
 public:
+    HcSr04DistanceSampler(gpio_num_t trig_pin, gpio_num_t echo_pin)
+        : trig_pin_(trig_pin), echo_pin_(echo_pin)
+    {
+        gpio_config_t trig_cfg = {};
+        trig_cfg.pin_bit_mask = (1ULL << trig_pin_);
+        trig_cfg.mode = GPIO_MODE_OUTPUT;
+        trig_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        trig_cfg.pull_up_en = GPIO_PULLUP_DISABLE;
+        trig_cfg.intr_type = GPIO_INTR_DISABLE;
+        ESP_ERROR_CHECK(gpio_config(&trig_cfg));
+
+        gpio_config_t echo_cfg = {};
+        echo_cfg.pin_bit_mask = (1ULL << echo_pin_);
+        echo_cfg.mode = GPIO_MODE_INPUT;
+        echo_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        echo_cfg.pull_up_en = GPIO_PULLUP_DISABLE;
+        echo_cfg.intr_type = GPIO_INTR_DISABLE;
+        ESP_ERROR_CHECK(gpio_config(&echo_cfg));
+
+        esp_rom_delay_us(50000);
+
+        ESP_LOGI(TAG, "Initialized HC-SR04 reader (TRIG=%d ECHO=%d)", static_cast<int>(trig_pin_), static_cast<int>(echo_pin_));
+    }
+
     std::optional<SampleData> read() override
     {
-        SampleData data;
-        data.distance_mm = distance_mm_;
-        data.burst_sample_count = 1;
+        int distance_mm = 0;
+        ReadError error = ReadError::None;
+        bool success = false;
 
-        if (increasing_)
+        for (int attempt = 1; attempt <= MAX_READ_ATTEMPTS; ++attempt)
         {
-            distance_mm_ += 3;
-            if (distance_mm_ >= 260)
+            if (read_distance_mm(distance_mm, error))
             {
-                distance_mm_ = 260;
-                increasing_ = false;
+                success = true;
+                break;
             }
-        }
-        else
-        {
-            distance_mm_ -= 3;
-            if (distance_mm_ <= 140)
-            {
-                distance_mm_ = 140;
-                increasing_ = true;
-            }
+
+            esp_rom_delay_us(2000);
         }
 
-        ESP_LOGI(TAG, "Sampled distance: %d mm", data.distance_mm);
-        return data;
+        if (!success)
+        {
+            const int echo_level = gpio_get_level(echo_pin_);
+            switch (error)
+            {
+            case ReadError::EchoStuckHighBeforeTrigger:
+                ESP_LOGW(TAG, "Failed to read HC-SR04 distance sample: ECHO stuck HIGH before trigger after %d attempts (echo=%d)", MAX_READ_ATTEMPTS, echo_level);
+                break;
+            case ReadError::EchoDidNotGoHigh:
+                ESP_LOGW(TAG, "Failed to read HC-SR04 distance sample: ECHO never went HIGH after trigger after %d attempts (echo=%d)", MAX_READ_ATTEMPTS, echo_level);
+                break;
+            case ReadError::EchoDidNotGoLow:
+                ESP_LOGW(TAG, "Failed to read HC-SR04 distance sample: ECHO stayed HIGH too long after %d attempts (echo=%d)", MAX_READ_ATTEMPTS, echo_level);
+                break;
+            default:
+                ESP_LOGW(TAG, "Failed to read HC-SR04 distance sample: unknown error after %d attempts (echo=%d)", MAX_READ_ATTEMPTS, echo_level);
+                break;
+            }
+            return std::nullopt;
+        }
+
+        ESP_LOGI(TAG, "Sampled distance: %d mm", distance_mm);
+        return SampleData
+        {
+            .distance_mm = distance_mm,
+            .burst_sample_count = 1
+        };
     }
 };
 
@@ -104,6 +214,12 @@ protected:
             }
 
             distances.push_back(sample->distance_mm);
+
+            if ((i + 1) < burst_sample_count_)
+            {
+                // HC-SR04 measurements should be spaced to avoid overlapping echoes.
+                vTaskDelay(pdMS_TO_TICKS(BURST_INTER_SAMPLE_DELAY_MS));
+            }
         }
 
         std::sort(distances.begin(), distances.end());
@@ -289,7 +405,7 @@ static void run(app_context_t *context)
         return;
     }
 
-    auto sampler = std::make_unique<SimpleDistanceSampler>();
+    auto sampler = std::make_unique<HcSr04DistanceSampler>(HC_SR04_TRIG_PIN, HC_SR04_ECHO_PIN);
     auto gateway = std::make_unique<MqttSampleGateway>(context);
     s_feeder = std::make_unique<BurstMedianEspFeeder>(
         std::move(sampler),
