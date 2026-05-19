@@ -1,8 +1,13 @@
 #include "pc_runner.h"
 
 #include <algorithm>
+#include <csignal>
 #include <iostream>
 #include <string>
+
+std::atomic<bool> PcRunner::shutdown_requested_ = false;
+std::mutex PcRunner::shutdown_mutex_;
+std::condition_variable PcRunner::shutdown_cv_;
 
 int main(int argc, char **argv)
 {
@@ -23,6 +28,9 @@ int main(int argc, char **argv)
     {
         broker_uri = argv[3];
     }
+
+    std::signal(SIGTERM, PcRunner::handle_signal);
+    std::signal(SIGINT,  PcRunner::handle_signal);
 
     std::cout << "[INFO] Starting PC telemetry runner with broker=" << broker_uri
               << " sensorId=" << sensor_id

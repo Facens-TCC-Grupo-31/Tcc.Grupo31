@@ -59,10 +59,15 @@ public sealed class MqttConsumer(
                 new MqttTopicFilterBuilder().WithTopic(MqttTopics.Samples).Build(),
                 cancellationToken);
 
+            await mqttClient.SubscribeAsync(
+                new MqttTopicFilterBuilder().WithTopic(MqttTopics.MockSamples).Build(),
+                cancellationToken);
+
             logger.LogInformation(
-                "Subscribed to topics {RegisterTopic} and {SamplesTopic}",
+                "Subscribed to topics {RegisterTopic}, {SamplesTopic}, and {MockSamplesTopic}",
                 MqttTopics.Register,
-                MqttTopics.Samples);
+                MqttTopics.Samples,
+                MqttTopics.MockSamples);
 
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }

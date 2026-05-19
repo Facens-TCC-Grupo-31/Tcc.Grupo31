@@ -56,8 +56,8 @@ protected:
                   << " mm from " << burst_sample_count_ << " samples" << std::endl;
 
         return SampleData{
-            .distance_mm = median_distance_mm,
-            .burst_sample_count = static_cast<short>(burst_sample_count_)
+            median_distance_mm,
+            static_cast<short>(burst_sample_count_)
         };
     }
 

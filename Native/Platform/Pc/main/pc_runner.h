@@ -4,7 +4,11 @@
 #include "pc_burst_median_feeder.h"
 #include "pc_mqtt_gateway.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <csignal>
 #include <memory>
+#include <mutex>
 #include <string>
 
 class PcRunner
@@ -46,11 +50,23 @@ public:
 
         feeder->start();
 
-        std::cout << "[INFO] PcRunner started. Press Enter to stop..." << std::endl;
-        std::string ignored;
-        std::getline(std::cin, ignored);
+        std::cout << "[INFO] PcRunner started." << std::endl;
+
+        std::unique_lock<std::mutex> lock(shutdown_mutex_);
+        shutdown_cv_.wait(lock, [] { return shutdown_requested_.load(); });
 
         feeder->stop();
         return 0;
     }
+
+    static void handle_signal(int)
+    {
+        shutdown_requested_.store(true);
+        shutdown_cv_.notify_all();
+    }
+
+private:
+    static std::atomic<bool> shutdown_requested_;
+    static std::mutex shutdown_mutex_;
+    static std::condition_variable shutdown_cv_;
 };

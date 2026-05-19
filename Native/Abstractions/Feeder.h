@@ -49,7 +49,7 @@ protected:
 
 public:
 	Feeder(std::unique_ptr<Reader<TData>> reader, std::unique_ptr<Gateway<TData>> gateway) : reader_(std::move(reader)), gateway_(std::move(gateway)) {}
-	~Feeder() = default;
+	virtual ~Feeder() = default;
 
 	void start()
 	{

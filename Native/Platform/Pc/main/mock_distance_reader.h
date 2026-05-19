@@ -18,7 +18,7 @@ public:
 
     std::optional<SampleData> read() override
     {
-        SampleData data{ .distance_mm = distance_mm_, .burst_sample_count = 1 };
+        SampleData data{ distance_mm_, 1 };
 
         return data;
     }

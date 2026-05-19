@@ -37,15 +37,15 @@ services:
     volumes:
       - ./infra/mosquitto:/mosquitto/config:ro
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/#", "-C", "1"]
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   api:
     build:
-      context: .
-      dockerfile: Api/Dockerfile
+      context: ..
+      dockerfile: Backend/Api/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +60,9 @@ services:
       Redis__Configuration: "redis:6379"
       Mqtt__Broker: "mosquitto"
       Mqtt__Port: "1883"
+      MockRuntime__Enabled: "true"
+      MockRuntime__ExecutablePath: "/app/mock-runtime/pc_telemetry_runner"
+      MockRuntime__BrokerUri: "tcp://mosquitto:1883"
     ports:
       - "8080:8080"
     restart: on-failure
