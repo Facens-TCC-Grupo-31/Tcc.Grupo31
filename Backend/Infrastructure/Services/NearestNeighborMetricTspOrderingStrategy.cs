@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Services;
 
 namespace Infrastructure.Services;
@@ -47,7 +48,7 @@ internal sealed class NearestNeighborMetricTspOrderingStrategy : IRouteOrderingS
 
             if (bestNode < 0)
             {
-                throw new InvalidOperationException("Unable to build route: graph contains unreachable selected bins.");
+                throw new UnreachableSelectedBinsException();
             }
 
             route.Add(bestNode);

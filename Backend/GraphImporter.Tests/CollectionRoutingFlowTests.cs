@@ -1,4 +1,5 @@
 using Application.Cache;
+using Application.Common.Exceptions;
 using Application.Services;
 using Domain.Entities;
 using Infrastructure.Database;
@@ -78,6 +79,70 @@ public sealed class CollectionRoutingFlowTests
         
         Assert.True(route.TotalDistance >= 0);
         Assert.True(route.RouteGenerationMs > 0);
+    }
+
+    [Fact]
+    public async Task GenerateRouteAsync_ThrowsUnreachableSelectedBinsException_WhenSelectedBinIsDisconnected()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Routing:DepotKey"] = "default",
+                ["Routing:DepotLatitude"] = "-23.47005",
+                ["Routing:DepotLongitude"] = "-47.43005",
+                ["Routing:FillThreshold"] = "0.8"
+            })
+            .Build();
+
+        services.AddLogging();
+        services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
+        services.AddSingleton<ISensorLatestValueCache, InMemorySensorLatestValueCache>();
+        services.AddServices(configuration);
+
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var nodeA = new GraphNode { X = -47.4300, Y = -23.4700 };
+        var nodeB = new GraphNode { X = -47.4310, Y = -23.4710 };
+        var nodeC = new GraphNode { X = -47.5000, Y = -23.5000 };
+
+        db.GraphNodes.AddRange(nodeA, nodeB, nodeC);
+        await db.SaveChangesAsync();
+
+        db.GraphEdges.AddRange(
+            new GraphEdge
+            {
+                FromNodeId = nodeA.Id,
+                ToNodeId = nodeB.Id,
+                Distance = 1
+            },
+            new GraphEdge
+            {
+                FromNodeId = nodeB.Id,
+                ToNodeId = nodeA.Id,
+                Distance = 1
+            });
+        await db.SaveChangesAsync();
+
+        var reachableSensor = new Sensor { IsActive = true, NodeId = nodeA.Id, CreatedAt = DateTime.UtcNow, ActivatedAt = DateTime.UtcNow };
+        var disconnectedSensor = new Sensor { IsActive = true, NodeId = nodeC.Id, CreatedAt = DateTime.UtcNow, ActivatedAt = DateTime.UtcNow };
+        db.Sensors.AddRange(reachableSensor, disconnectedSensor);
+        await db.SaveChangesAsync();
+
+        var cache = scope.ServiceProvider.GetRequiredService<ISensorLatestValueCache>();
+        await cache.SetAsync(reachableSensor.Id, 0.95f, DateTime.UtcNow);
+        await cache.SetAsync(disconnectedSensor.Id, 0.99f, DateTime.UtcNow);
+
+        var routingService = scope.ServiceProvider.GetRequiredService<ICollectionRoutingService>();
+
+        await Assert.ThrowsAsync<UnreachableSelectedBinsException>(() => routingService.GenerateRouteAsync());
     }
 
     private sealed class InMemorySensorLatestValueCache : ISensorLatestValueCache

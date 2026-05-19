@@ -1,6 +1,6 @@
 using Application.Common.Dtos;
+using Application.Common.Exceptions;
 using Application.Services;
-using Domain.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
@@ -11,9 +11,22 @@ public sealed class RoutesController(ICollectionRoutingService collectionRouting
 {
     [HttpGet("collection")]
     [ProducesResponseType<CollectionRouteResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> GetCollectionRoute(CancellationToken ct)
     {
-        CollectionRouteResponseDto route = await collectionRoutingService.GenerateRouteAsync(ct);
-        return Ok(route);
+        try
+        {
+            CollectionRouteResponseDto route = await collectionRoutingService.GenerateRouteAsync(ct);
+            return Ok(route);
+        }
+        catch (UnreachableSelectedBinsException ex)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Title = "Unreachable collection bins",
+                Detail = ex.Message,
+                Status = StatusCodes.Status422UnprocessableEntity
+            });
+        }
     }
 }
