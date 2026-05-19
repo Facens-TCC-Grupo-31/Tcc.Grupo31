@@ -11,6 +11,7 @@ namespace Infrastructure.Services;
 internal sealed class ReadingService(
     AppDbContext db,
     ISensorLatestValueCache cache,
+    ISensorLivenessCache livenessCache,
     ILogger<ReadingService> logger) : IReadingService
 {
     private const int MaxDistanceMm = 100_000;
@@ -74,6 +75,7 @@ internal sealed class ReadingService(
         await db.SaveChangesAsync(ct);
 
         await cache.SetAsync(sensorId, fillLevel, now, ct);
+        await livenessCache.RefreshAsync(sensorId, ct);
 
         return true;
     }
@@ -143,6 +145,7 @@ internal sealed class ReadingService(
         await db.SaveChangesAsync(ct);
 
         await cache.SetAsync(sensorId, fillLevel, now, ct);
+        await livenessCache.RefreshAsync(sensorId, ct);
 
         return true;
     }

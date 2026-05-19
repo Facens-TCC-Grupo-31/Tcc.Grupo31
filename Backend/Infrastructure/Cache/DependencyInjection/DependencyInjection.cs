@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions.Configuration));
         services.AddSingleton<IProvisioningDataCache, RedisProvisioningDataCache>();
         services.AddSingleton<ISensorLatestValueCache, RedisSensorLatestValueCache>();
+        services.AddSingleton<ISensorLivenessCache, RedisSensorLivenessCache>();
 
         return services;
     }
