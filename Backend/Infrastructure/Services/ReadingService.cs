@@ -14,6 +14,7 @@ internal sealed class ReadingService(
     ILogger<ReadingService> logger) : IReadingService
 {
     private const int MaxDistanceMm = 100_000;
+    private const string MockCalibrationMethod = "mock";
 
     public async Task<bool> RegisterReadingAsync(
         long sensorId, int distanceMm, CancellationToken ct = default)
@@ -59,6 +60,75 @@ internal sealed class ReadingService(
             DistanceMm = distanceMm,
             ReceivedAtUtc = now,
             Source = "mqtt"
+        };
+
+        var reading = new SensorReading
+        {
+            SensorId = sensorId,
+            FillLevel = fillLevel,
+            Timestamp = now
+        };
+
+        db.SensorDistanceMeasurements.Add(rawMeasurement);
+        db.SensorReadings.Add(reading);
+        await db.SaveChangesAsync(ct);
+
+        await cache.SetAsync(sensorId, fillLevel, now, ct);
+
+        return true;
+    }
+
+    public async Task<bool> RegisterMockReadingAsync(long sensorId, int distanceMm, CancellationToken ct = default)
+    {
+        if (distanceMm <= 0 || distanceMm > MaxDistanceMm)
+        {
+            logger.LogWarning(
+                "Rejected mock sample for sensor {SensorId}: distance {DistanceMm} out of range (1..{MaxDistanceMm}]",
+                sensorId,
+                distanceMm,
+                MaxDistanceMm);
+            return false;
+        }
+
+        Sensor? sensor = await db.Sensors
+            .AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == sensorId, ct);
+
+        if (sensor is null || !sensor.IsActive)
+        {
+            logger.LogWarning(
+                "Rejected mock sample for sensor {SensorId}: sensor missing or inactive",
+                sensorId);
+            return false;
+        }
+
+        if (!string.Equals(sensor.CalibrationMethod, MockCalibrationMethod, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "Rejected mock sample for sensor {SensorId}: sensor is not marked as mock",
+                sensorId);
+            return false;
+        }
+
+        if (!sensor.EmptyDistanceMm.HasValue || sensor.EmptyDistanceMm.Value <= 0)
+        {
+            logger.LogWarning(
+                "Rejected mock sample for sensor {SensorId}: sensor has no calibration baseline",
+                sensorId);
+            return false;
+        }
+
+        float fillLevel = 1f - ((float)distanceMm / sensor.EmptyDistanceMm.Value);
+        fillLevel = Math.Clamp(fillLevel, 0f, 1f);
+
+        DateTime now = DateTime.UtcNow;
+
+        var rawMeasurement = new SensorDistanceMeasurement
+        {
+            SensorId = sensorId,
+            DistanceMm = distanceMm,
+            ReceivedAtUtc = now,
+            Source = "mqtt-mock"
         };
 
         var reading = new SensorReading

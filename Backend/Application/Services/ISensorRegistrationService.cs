@@ -10,6 +10,13 @@ public interface ISensorRegistrationService
         CancellationToken ct = default
     );
 
+    Task<RegistrationResponseDto> RequestMockRegistrationAsync(
+        Position position,
+        int baselineDistanceMm,
+        int desiredReadingMm,
+        CancellationToken ct = default
+    );
+
     Task<bool> CompleteRegistrationAsync(
         long sensorId,
         string token,

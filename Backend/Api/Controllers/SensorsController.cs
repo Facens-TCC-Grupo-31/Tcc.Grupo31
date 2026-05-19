@@ -29,6 +29,66 @@ public sealed class SensorsController(
         );
     }
 
+    [HttpPost("register/mock")]
+    [ProducesResponseType<RegistrationResponseDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RegisterMock(
+        [FromBody] MockRegistrationRequestDto request,
+        CancellationToken ct)
+    {
+        if (request.BaselineDistanceMm <= 0)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid mock baseline",
+                Detail = "baselineDistanceMm must be greater than 0.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        if (request.DesiredReadingMm <= 0)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid mock desired reading",
+                Detail = "desiredReadingMm must be greater than 0.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        RegistrationResponseDto result;
+        try
+        {
+            result = await registrationService.RequestMockRegistrationAsync(
+                request.Position,
+                request.BaselineDistanceMm,
+                request.DesiredReadingMm,
+                ct
+            );
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid mock registration payload",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(
+                title: "Unable to register mock sensor",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        return CreatedAtAction(
+            nameof(RegisterMock),
+            result
+        );
+    }
+
     [HttpGet("{sensorId:long}/latest")]
     [ProducesResponseType<ReadingDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

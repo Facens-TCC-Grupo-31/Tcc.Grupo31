@@ -12,8 +12,11 @@ internal sealed class SensorRegistrationService(
     AppDbContext db,
     IProvisioningDataCache provisioningDataCache,
     IGraphService graphService,
-    ILogger<SensorRegistrationService> logger) : ISensorRegistrationService
+    ILogger<SensorRegistrationService> logger,
+    IMockSensorRuntimeNotifier? mockSensorRuntimeNotifier = null) : ISensorRegistrationService
 {
+    private const string MockCalibrationMethod = "mock";
+
     public async Task<RegistrationResponseDto> RequestRegistrationAsync(
         Position position,
         CancellationToken ct = default)
@@ -44,6 +47,92 @@ internal sealed class SensorRegistrationService(
         {
             SensorId = sensor.Id,
             ProvisioningToken = token
+        };
+    }
+
+    public async Task<RegistrationResponseDto> RequestMockRegistrationAsync(
+        Position position,
+        int baselineDistanceMm,
+        int desiredReadingMm,
+        CancellationToken ct = default)
+    {
+        if (baselineDistanceMm <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(baselineDistanceMm),
+                "Mock baseline must be greater than zero.");
+        }
+
+        if (desiredReadingMm <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(desiredReadingMm),
+                "Mock desired reading must be greater than zero.");
+        }
+
+        if (desiredReadingMm > short.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(desiredReadingMm),
+                $"Mock desired reading must be <= {short.MaxValue}.");
+        }
+
+        using IDisposable? writeLock = graphService.TryAcquireWriteLock();
+        if (writeLock is null)
+        {
+            throw new InvalidOperationException("Graph write lock timed out during mock registration.");
+        }
+
+        var sensor = new Sensor
+        {
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Sensors.Add(sensor);
+        await db.SaveChangesAsync(ct);
+
+        await graphService.ApplyNearestEdgeSplitAsync(
+            position,
+            async newNodeId =>
+            {
+                sensor.IsActive = true;
+                sensor.NodeId = newNodeId;
+                sensor.ActivatedAt = DateTime.UtcNow;
+                sensor.EmptyDistanceMm = baselineDistanceMm;
+                sensor.CalibratedAtUtc = DateTime.UtcNow;
+                sensor.CalibrationSampleCount = (short)desiredReadingMm;
+                sensor.CalibrationMethod = MockCalibrationMethod;
+
+                await db.SaveChangesAsync(ct);
+            },
+            ct
+        );
+
+        logger.LogInformation(
+            "Mock sensor {SensorId} activated as node {NodeId} at ({Lat},{Lon}) with baseline {BaselineDistanceMm} and desired reading {DesiredReadingMm}",
+            sensor.Id,
+            sensor.NodeId,
+            position.Latitude,
+            position.Longitude,
+            baselineDistanceMm,
+            desiredReadingMm
+        );
+
+        if (mockSensorRuntimeNotifier is not null)
+        {
+            await mockSensorRuntimeNotifier.StartMockSensorAsync(
+                sensor.Id,
+                baselineDistanceMm,
+                desiredReadingMm,
+                ct
+            );
+        }
+
+        return new RegistrationResponseDto
+        {
+            SensorId = sensor.Id,
+            ProvisioningToken = string.Empty
         };
     }
 

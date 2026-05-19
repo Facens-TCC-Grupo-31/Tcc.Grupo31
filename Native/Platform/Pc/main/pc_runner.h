@@ -11,7 +11,7 @@ class PcRunner
 {
     std::string broker_uri_;
     std::string sensor_id_;
-    std::string provisioning_token_;
+    int desired_reading_mm_;
     int telemetry_interval_ms_;
     size_t burst_sample_count_;
 
@@ -19,12 +19,12 @@ public:
     PcRunner(
         std::string broker_uri,
         std::string sensor_id,
-        std::string provisioning_token,
+        int desired_reading_mm,
         int telemetry_interval_ms,
         size_t burst_sample_count)
         : broker_uri_(std::move(broker_uri)),
           sensor_id_(std::move(sensor_id)),
-          provisioning_token_(std::move(provisioning_token)),
+          desired_reading_mm_(desired_reading_mm),
           telemetry_interval_ms_(telemetry_interval_ms),
           burst_sample_count_(burst_sample_count)
     {
@@ -32,12 +32,11 @@ public:
 
     int run()
     {
-        auto reader = std::make_unique<MockDistanceReader>();
+        auto reader = std::make_unique<MockDistanceReader>(desired_reading_mm_);
         auto gateway = std::make_unique<PcMqttGateway>(
             broker_uri_,
             "pc-runner-" + sensor_id_,
-            sensor_id_,
-            provisioning_token_);
+            sensor_id_);
 
         auto feeder = std::make_unique<BurstMedianServerFeeder>(
             std::move(reader),

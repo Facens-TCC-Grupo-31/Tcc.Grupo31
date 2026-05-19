@@ -1,5 +1,6 @@
 using Application.Common.Constants;
 using Application.Handlers.RegisterMessageReceived;
+using Application.Handlers.SensorMockSampleReceived.Models;
 using Application.Handlers.SensorSampleReceived.Models;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,10 @@ public sealed class MessageDispatcher(
 
             case MqttTopics.Samples:
                 await mediator.Send(new HandleSensorSampleReceivedCommand(payload), cancellationToken);
+                break;
+
+            case MqttTopics.MockSamples:
+                await mediator.Send(new HandleSensorMockSampleReceivedCommand(payload), cancellationToken);
                 break;
 
             default:

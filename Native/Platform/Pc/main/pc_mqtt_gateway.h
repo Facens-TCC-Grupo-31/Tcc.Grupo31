@@ -10,24 +10,18 @@
 
 class PcMqttGateway : public Gateway<SampleData>
 {
-    static constexpr const char *REGISTRATION_TOPIC = "devices/register";
-    static constexpr const char *TELEMETRY_TOPIC = "devices/samples";
+    static constexpr const char *TELEMETRY_TOPIC = "devices/mock/samples";
 
     mqtt::async_client client_;
     std::string sensor_id_;
-    std::string provisioning_token_;
-    bool has_registration_token_;
 
 public:
     PcMqttGateway(
         const std::string &broker_uri,
         const std::string &client_id,
-        const std::string &sensor_id,
-        const std::string &provisioning_token)
+        const std::string &sensor_id)
         : client_(broker_uri, client_id),
-          sensor_id_(sensor_id),
-          provisioning_token_(provisioning_token),
-          has_registration_token_(!provisioning_token.empty())
+          sensor_id_(sensor_id)
     {
         mqtt::connect_options opts;
         opts.set_automatic_reconnect(true);
@@ -53,22 +47,6 @@ public:
 
     void send(const SampleData &data) override
     {
-        if (has_registration_token_)
-        {
-            std::string registration_payload =
-                "{\"sensorId\":" + sensor_id_ +
-                ",\"provisioningToken\":\"" + provisioning_token_ +
-                "\",\"baselineDistanceMm\":" + std::to_string(data.distance_mm) +
-                ",\"calibrationSampleCount\":" + std::to_string(data.burst_sample_count) +
-                "}";
-
-            client_.publish(REGISTRATION_TOPIC, registration_payload.c_str(), static_cast<int>(registration_payload.size()), 1, false)->wait();
-            has_registration_token_ = false;
-
-            std::cout << "[INFO] Published registration payload: " << registration_payload << std::endl;
-            return;
-        }
-
         std::string telemetry_payload =
             "{\"sensorId\":" + sensor_id_ +
             ",\"distanceMm\":" + std::to_string(data.distance_mm) +
