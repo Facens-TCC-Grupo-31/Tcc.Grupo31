@@ -17,8 +17,8 @@ public sealed class OsmGraphImporterTests
         // Seed a pre-existing node very close to imported geometry to ensure new close nodes remain distinct.
         db.GraphNodes.Add(new GraphNode
         {
-            X = -47.43000000005,
-            Y = -23.47000000005
+            Longitude = -47.43000000005,
+            Latitude = -23.47000000005
         });
         await db.SaveChangesAsync();
 
@@ -50,12 +50,12 @@ public sealed class OsmGraphImporterTests
             Assert.Equal(4, nodes.Count);
             Assert.Equal(4, edges.Count);
 
-            Assert.Contains(nodes, n => Math.Abs(n.X - (-47.4300000001)) < 1e-13 && Math.Abs(n.Y - (-23.4700000001)) < 1e-13);
-            Assert.DoesNotContain(nodes, n => Math.Abs(n.X - (-47.4400000000)) < 1e-13 && Math.Abs(n.Y - (-23.4800000000)) < 1e-13);
+            Assert.Contains(nodes, n => Math.Abs(n.Longitude - (-47.4300000001)) < 1e-13 && Math.Abs(n.Latitude - (-23.4700000001)) < 1e-13);
+            Assert.DoesNotContain(nodes, n => Math.Abs(n.Longitude - (-47.4400000000)) < 1e-13 && Math.Abs(n.Latitude - (-23.4800000000)) < 1e-13);
 
             var importedCloseNodes = nodes
-                .Where(n => n.X <= -47.43 && n.X >= -47.4300000002)
-                .OrderBy(n => n.X)
+                .Where(n => n.Longitude <= -47.43 && n.Longitude >= -47.4300000002)
+                .OrderBy(n => n.Longitude)
                 .ToList();
 
             Assert.True(importedCloseNodes.Count >= 3);

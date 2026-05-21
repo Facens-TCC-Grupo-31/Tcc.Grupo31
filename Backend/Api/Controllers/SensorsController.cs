@@ -18,6 +18,11 @@ public sealed class SensorsController(
         [FromBody] RegistrationRequestDto request,
         CancellationToken ct)
     {
+        if (TryBuildInvalidPositionProblem(request.Position, out ProblemDetails? problem))
+        {
+            return BadRequest(problem);
+        }
+
         var result = await registrationService.RequestRegistrationAsync(
             request.Position,
             ct
@@ -36,6 +41,11 @@ public sealed class SensorsController(
         [FromBody] MockRegistrationRequestDto request,
         CancellationToken ct)
     {
+        if (TryBuildInvalidPositionProblem(request.Position, out ProblemDetails? problem))
+        {
+            return BadRequest(problem);
+        }
+
         if (request.BaselineDistanceMm <= 0)
         {
             return BadRequest(new ProblemDetails
@@ -140,4 +150,32 @@ public sealed class SensorsController(
     }
 
     public record GetReadingsQueryParams(DateTime? From, DateTime? To);
+
+    private static bool TryBuildInvalidPositionProblem(Position position, out ProblemDetails? problem)
+    {
+        if (position.Latitude < -90 || position.Latitude > 90)
+        {
+            problem = new ProblemDetails
+            {
+                Title = "Invalid latitude",
+                Detail = "position.latitude must be between -90 and 90.",
+                Status = StatusCodes.Status400BadRequest
+            };
+            return true;
+        }
+
+        if (position.Longitude < -180 || position.Longitude > 180)
+        {
+            problem = new ProblemDetails
+            {
+                Title = "Invalid longitude",
+                Detail = "position.longitude must be between -180 and 180.",
+                Status = StatusCodes.Status400BadRequest
+            };
+            return true;
+        }
+
+        problem = null;
+        return false;
+    }
 }

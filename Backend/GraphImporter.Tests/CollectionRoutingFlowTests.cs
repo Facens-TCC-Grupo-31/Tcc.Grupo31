@@ -40,8 +40,8 @@ public sealed class CollectionRoutingFlowTests
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.EnsureCreatedAsync();
 
-        var nodeA = new GraphNode { X = -47.4300, Y = -23.4700 };
-        var nodeB = new GraphNode { X = -47.4310, Y = -23.4710 };
+        var nodeA = new GraphNode { Longitude = -47.4300, Latitude = -23.4700 };
+        var nodeB = new GraphNode { Longitude = -47.4310, Latitude = -23.4710 };
 
         db.GraphNodes.AddRange(nodeA, nodeB);
         await db.SaveChangesAsync();
@@ -109,9 +109,9 @@ public sealed class CollectionRoutingFlowTests
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.EnsureCreatedAsync();
 
-        var nodeA = new GraphNode { X = -47.4300, Y = -23.4700 };
-        var nodeB = new GraphNode { X = -47.4310, Y = -23.4710 };
-        var nodeC = new GraphNode { X = -47.5000, Y = -23.5000 };
+        var nodeA = new GraphNode { Longitude = -47.4300, Latitude = -23.4700 };
+        var nodeB = new GraphNode { Longitude = -47.4310, Latitude = -23.4710 };
+        var nodeC = new GraphNode { Longitude = -47.5000, Latitude = -23.5000 };
 
         db.GraphNodes.AddRange(nodeA, nodeB, nodeC);
         await db.SaveChangesAsync();

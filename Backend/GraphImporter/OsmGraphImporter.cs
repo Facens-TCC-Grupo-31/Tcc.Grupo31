@@ -42,8 +42,8 @@ public static class OsmGraphImporter
                 kv => kv.Key,
                 kv => new GraphNode
                 {
-                    X = kv.Value.Lon,
-                    Y = kv.Value.Lat
+                    Longitude = kv.Value.Lon,
+                    Latitude = kv.Value.Lat
                 });
 
         Console.WriteLine($"Persisting {osmIdToGraphNode.Count} graph nodes...");
@@ -82,8 +82,8 @@ public static class OsmGraphImporter
 
     private static double CalculateDistance(GraphNode a, GraphNode b)
     {
-        double dx = b.X - a.X;
-        double dy = b.Y - a.Y;
-        return Math.Sqrt(dx * dx + dy * dy);
+        double deltaLongitude = b.Longitude - a.Longitude;
+        double deltaLatitude = b.Latitude - a.Latitude;
+        return Math.Sqrt(deltaLongitude * deltaLongitude + deltaLatitude * deltaLatitude);
     }
 }

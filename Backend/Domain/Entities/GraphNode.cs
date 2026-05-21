@@ -5,10 +5,10 @@ namespace Domain.Entities;
 public sealed class GraphNode
 {
     public int Id { get; set; }
-    public double X { get; set; }
-    public double Y { get; set; }
+    public double Longitude { get; set; }
+    public double Latitude { get; set; }
 
-    public Position Position => new(Y, X);
+    public Position Position => new(Latitude, Longitude);
 
     public ICollection<Sensor> Sensors { get; set; } = [];
 }

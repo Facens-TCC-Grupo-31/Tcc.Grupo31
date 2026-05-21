@@ -66,9 +66,32 @@ internal sealed class GraphService(
         await EnsureLoadedAsync(ct);
 
         if (Edges.Count == 0)
-            return await InsertIsolatedNodeAsync(position.Longitude, position.Latitude, applyMutation, ct);
+        {
+            logger.LogInformation(
+                "Graph has no edges; inserting isolated node at input position lat={Latitude}, lon={Longitude}",
+                position.Latitude,
+                position.Longitude);
 
-        var (edge, px, py) = FindNearestEdge(position.Longitude, position.Latitude);
+            return await InsertIsolatedNodeAsync(position.Longitude, position.Latitude, applyMutation, ct);
+        }
+
+        var (edge, projectedLongitude, projectedLatitude) = FindNearestEdge(position.Longitude, position.Latitude);
+        GraphNode nearestFrom = Nodes[edge.FromNodeId];
+        GraphNode nearestTo = Nodes[edge.ToNodeId];
+        double projectionDistance = Distance(position.Longitude, position.Latitude, projectedLongitude, projectedLatitude);
+
+        logger.LogInformation(
+            "Graph split input lat={Latitude}, lon={Longitude}; nearest edge {EdgeId} from (lat={FromLat}, lon={FromLon}) to (lat={ToLat}, lon={ToLon}); projected to (lat={ProjectedLat}, lon={ProjectedLon}) with distance {ProjectionDistance}",
+            position.Latitude,
+            position.Longitude,
+            edge.Id,
+            nearestFrom.Latitude,
+            nearestFrom.Longitude,
+            nearestTo.Latitude,
+            nearestTo.Longitude,
+            projectedLatitude,
+            projectedLongitude,
+            projectionDistance);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -85,7 +108,7 @@ internal sealed class GraphService(
         GraphNode fromNode = Nodes[edge.FromNodeId];
         GraphNode toNode = Nodes[edge.ToNodeId];
 
-        var newNode = new GraphNode { X = px, Y = py };
+        var newNode = new GraphNode { Longitude = projectedLongitude, Latitude = projectedLatitude };
         db.GraphNodes.Add(newNode);
         await db.SaveChangesAsync(ct);
 
@@ -93,13 +116,13 @@ internal sealed class GraphService(
         {
             FromNodeId = fromNode.Id,
             ToNodeId = newNode.Id,
-            Distance = Distance(fromNode.X, fromNode.Y, newNode.X, newNode.Y)
+            Distance = Distance(fromNode.Longitude, fromNode.Latitude, newNode.Longitude, newNode.Latitude)
         };
         var edge2 = new GraphEdge
         {
             FromNodeId = newNode.Id,
             ToNodeId = toNode.Id,
-            Distance = Distance(newNode.X, newNode.Y, toNode.X, toNode.Y)
+            Distance = Distance(newNode.Longitude, newNode.Latitude, toNode.Longitude, toNode.Latitude)
         };
 
         var newEdges = new List<GraphEdge> { edge1, edge2 };
@@ -111,14 +134,14 @@ internal sealed class GraphService(
             {
                 FromNodeId = toNode.Id,
                 ToNodeId = newNode.Id,
-                Distance = Distance(toNode.X, toNode.Y, newNode.X, newNode.Y)
+                Distance = Distance(toNode.Longitude, toNode.Latitude, newNode.Longitude, newNode.Latitude)
             };
 
             var edge4 = new GraphEdge
             {
                 FromNodeId = newNode.Id,
                 ToNodeId = fromNode.Id,
-                Distance = Distance(newNode.X, newNode.Y, fromNode.X, fromNode.Y)
+                Distance = Distance(newNode.Longitude, newNode.Latitude, fromNode.Longitude, fromNode.Latitude)
             };
 
             newEdges.Add(edge3);
@@ -152,11 +175,11 @@ internal sealed class GraphService(
         }
 
         logger.LogInformation(
-            "Graph edge {EdgeId} split by new node {NodeId} at ({X},{Y})",
+            "Graph edge {EdgeId} split by new node {NodeId} at (lat={Latitude}, lon={Longitude})",
             edge.Id,
             newNode.Id,
-            newNode.X,
-            newNode.Y
+            newNode.Latitude,
+            newNode.Longitude
         );
 
         return newNode.Id;
@@ -232,14 +255,14 @@ internal sealed class GraphService(
     }
 
     private async Task<int> InsertIsolatedNodeAsync(
-        double x,
-        double y,
+        double longitude,
+        double latitude,
         Func<int, Task> applyMutation,
         CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        var node = new GraphNode { X = x, Y = y };
+        var node = new GraphNode { Longitude = longitude, Latitude = latitude };
         db.GraphNodes.Add(node);
         await db.SaveChangesAsync(ct);
 
@@ -256,65 +279,72 @@ internal sealed class GraphService(
         return node.Id;
     }
 
-    private static (GraphEdge edge, double px, double py) FindNearestEdge(double x, double y)
+    private static (GraphEdge edge, double projectedLongitude, double projectedLatitude) FindNearestEdge(double longitude, double latitude)
     {
         GraphEdge? nearest = null;
-        double nearestDistSq = double.MaxValue;
-        double bestPx = 0;
-        double bestPy = 0;
+        double nearestDistanceSquared = double.MaxValue;
+        double nearestProjectedLongitude = 0;
+        double nearestProjectedLatitude = 0;
 
         foreach (GraphEdge edge in Edges.Values)
         {
-            GraphNode a = Nodes[edge.FromNodeId];
-            GraphNode b = Nodes[edge.ToNodeId];
+            GraphNode fromNode = Nodes[edge.FromNodeId];
+            GraphNode toNode = Nodes[edge.ToNodeId];
 
-            (double px, double py) = ProjectPointOntoSegment(x, y, a.X, a.Y, b.X, b.Y);
-            double d2 = DistSq(x, y, px, py);
-            if (d2 < nearestDistSq)
+            (double projectedLongitude, double projectedLatitude) = ProjectPointOntoSegment(
+                longitude,
+                latitude,
+                fromNode.Longitude,
+                fromNode.Latitude,
+                toNode.Longitude,
+                toNode.Latitude);
+
+            double distanceSquared = DistanceSquared(longitude, latitude, projectedLongitude, projectedLatitude);
+            if (distanceSquared < nearestDistanceSquared)
             {
-                nearestDistSq = d2;
+                nearestDistanceSquared = distanceSquared;
                 nearest = edge;
-                bestPx = px;
-                bestPy = py;
+                nearestProjectedLongitude = projectedLongitude;
+                nearestProjectedLatitude = projectedLatitude;
             }
         }
 
         if (nearest is null)
             throw new InvalidOperationException("No graph edges available for nearest-edge split.");
 
-        return (nearest, bestPx, bestPy);
+        return (nearest, nearestProjectedLongitude, nearestProjectedLatitude);
     }
 
-    private static (double x, double y) ProjectPointOntoSegment(
-        double px,
-        double py,
-        double ax,
-        double ay,
-        double bx,
-        double by)
+    private static (double longitude, double latitude) ProjectPointOntoSegment(
+        double pointLongitude,
+        double pointLatitude,
+        double fromLongitude,
+        double fromLatitude,
+        double toLongitude,
+        double toLatitude)
     {
-        double abx = bx - ax;
-        double aby = by - ay;
-        double ab2 = abx * abx + aby * aby;
-        if (ab2 == 0)
-            return (ax, ay);
+        double deltaLongitude = toLongitude - fromLongitude;
+        double deltaLatitude = toLatitude - fromLatitude;
+        double segmentMagnitudeSquared = deltaLongitude * deltaLongitude + deltaLatitude * deltaLatitude;
+        if (segmentMagnitudeSquared == 0)
+            return (fromLongitude, fromLatitude);
 
-        double apx = px - ax;
-        double apy = py - ay;
-        double t = (apx * abx + apy * aby) / ab2;
+        double pointOffsetLongitude = pointLongitude - fromLongitude;
+        double pointOffsetLatitude = pointLatitude - fromLatitude;
+        double t = (pointOffsetLongitude * deltaLongitude + pointOffsetLatitude * deltaLatitude) / segmentMagnitudeSquared;
         t = Math.Clamp(t, 0, 1);
-        return (ax + t * abx, ay + t * aby);
+        return (fromLongitude + t * deltaLongitude, fromLatitude + t * deltaLatitude);
     }
 
-    private static double DistSq(double x1, double y1, double x2, double y2)
+    private static double DistanceSquared(double longitude1, double latitude1, double longitude2, double latitude2)
     {
-        double dx = x1 - x2;
-        double dy = y1 - y2;
-        return dx * dx + dy * dy;
+        double deltaLongitude = longitude1 - longitude2;
+        double deltaLatitude = latitude1 - latitude2;
+        return deltaLongitude * deltaLongitude + deltaLatitude * deltaLatitude;
     }
 
-    private static double Distance(double x1, double y1, double x2, double y2)
-        => Math.Sqrt(DistSq(x1, y1, x2, y2));
+    private static double Distance(double longitude1, double latitude1, double longitude2, double latitude2)
+        => Math.Sqrt(DistanceSquared(longitude1, latitude1, longitude2, latitude2));
 
     private static void AddEdgeToAdjacency(GraphEdge edge)
     {

@@ -4,6 +4,7 @@ using Application.Services;
 using Domain.Entities;
 using Domain.ValueObjects;
 using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
@@ -37,7 +38,7 @@ internal sealed class SensorRegistrationService(
             ct);
 
         logger.LogInformation(
-            "Registration requested for sensor {SensorId} at ({Lat},{Lon})",
+            "Registration requested for sensor {SensorId} at (lat={Latitude}, lon={Longitude})",
             sensor.Id,
             position.Latitude,
             position.Longitude
@@ -109,12 +110,18 @@ internal sealed class SensorRegistrationService(
             ct
         );
 
+        GraphNode? activatedNode = await db.GraphNodes
+            .AsNoTracking()
+            .SingleOrDefaultAsync(node => node.Id == sensor.NodeId, ct);
+
         logger.LogInformation(
-            "Mock sensor {SensorId} activated as node {NodeId} at ({Lat},{Lon}) with baseline {BaselineDistanceMm} and desired reading {DesiredReadingMm}",
+            "Mock sensor {SensorId} activated as node {NodeId} from input (lat={InputLatitude}, lon={InputLongitude}) snapped to (lat={SnappedLatitude}, lon={SnappedLongitude}) with baseline {BaselineDistanceMm} and desired reading {DesiredReadingMm}",
             sensor.Id,
             sensor.NodeId,
             position.Latitude,
             position.Longitude,
+            activatedNode?.Latitude,
+            activatedNode?.Longitude,
             baselineDistanceMm,
             desiredReadingMm
         );
@@ -222,9 +229,21 @@ internal sealed class SensorRegistrationService(
         }
 
         logger.LogInformation(
-            "Sensor {SensorId} activated as node {NodeId}",
+            "Sensor {SensorId} activated as node {NodeId} from input (lat={InputLatitude}, lon={InputLongitude}) snapped to (lat={SnappedLatitude}, lon={SnappedLongitude})",
             sensorId,
-            sensor.NodeId
+            sensor.NodeId,
+            registrationContext.Position.Latitude,
+            registrationContext.Position.Longitude,
+            await db.GraphNodes
+                .AsNoTracking()
+                .Where(node => node.Id == sensor.NodeId)
+                .Select(node => (double?)node.Latitude)
+                .SingleOrDefaultAsync(ct),
+            await db.GraphNodes
+                .AsNoTracking()
+                .Where(node => node.Id == sensor.NodeId)
+                .Select(node => (double?)node.Longitude)
+                .SingleOrDefaultAsync(ct)
         );
 
         return true;
