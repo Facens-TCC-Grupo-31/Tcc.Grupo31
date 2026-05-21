@@ -1,4 +1,5 @@
 using Application.Common.Dtos;
+using Application.Common.Enums;
 using Application.Common.Exceptions;
 using Application.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -13,13 +14,15 @@ public sealed class RoutesController(ICollectionRoutingService collectionRouting
     [ProducesResponseType<CollectionRouteResponseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<CollectionRouteGeoJsonDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> GetCollectionRoute([FromQuery] string? format, CancellationToken ct)
+    public async Task<IActionResult> GetCollectionRoute(
+        [FromQuery] CollectionRouteOutputFormat format = CollectionRouteOutputFormat.Json,
+        CancellationToken ct = default)
     {
         try
         {
             CollectionRouteResponseDto route = await collectionRoutingService.GenerateRouteAsync(ct);
 
-            if (string.Equals(format, "geojson", StringComparison.OrdinalIgnoreCase))
+            if (format == CollectionRouteOutputFormat.GeoJson)
             {
                 return Ok(CollectionRouteGeoJsonDto.From(route));
             }
