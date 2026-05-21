@@ -11,12 +11,19 @@ public sealed class RoutesController(ICollectionRoutingService collectionRouting
 {
     [HttpGet("collection")]
     [ProducesResponseType<CollectionRouteResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<CollectionRouteGeoJsonDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> GetCollectionRoute(CancellationToken ct)
+    public async Task<IActionResult> GetCollectionRoute([FromQuery] string? format, CancellationToken ct)
     {
         try
         {
             CollectionRouteResponseDto route = await collectionRoutingService.GenerateRouteAsync(ct);
+
+            if (string.Equals(format, "geojson", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(CollectionRouteGeoJsonDto.From(route));
+            }
+
             return Ok(route);
         }
         catch (UnreachableSelectedBinsException ex)

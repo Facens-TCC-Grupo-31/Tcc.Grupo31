@@ -7,6 +7,11 @@ public interface IShortestPathStrategy
         IReadOnlyCollection<int> targetNodeIds,
         CancellationToken ct = default);
 
+    Task<IReadOnlyList<int>> GetShortestPathAsync(
+        int sourceNodeId,
+        int targetNodeId,
+        CancellationToken ct = default);
+
     Task<IReadOnlyDictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
         IReadOnlyCollection<int> waypointNodeIds,
         CancellationToken ct = default);

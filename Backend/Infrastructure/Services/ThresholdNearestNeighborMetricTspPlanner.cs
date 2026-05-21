@@ -54,6 +54,12 @@ internal sealed class ThresholdNearestNeighborMetricTspPlanner(
             sensorVisitOrder.AddRange(sensors);
         }
 
+        var selectedSensorById = selectedPoints.ToDictionary(x => x.SensorId);
+        var orderedSelectedSensors = sensorVisitOrder
+            .Where(sensorId => selectedSensorById.ContainsKey(sensorId))
+            .Select(sensorId => selectedSensorById[sensorId])
+            .ToList();
+
         double totalDistance = 0;
         for (int i = 0; i < nodeVisitOrder.Count - 1; i++)
         {
@@ -75,6 +81,7 @@ internal sealed class ThresholdNearestNeighborMetricTspPlanner(
         return new RoutePlanningResult(
             nodeVisitOrder,
             sensorVisitOrder,
+            orderedSelectedSensors,
             selectedPoints.Count,
             sensorVisitOrder.Count,
             totalDistance,

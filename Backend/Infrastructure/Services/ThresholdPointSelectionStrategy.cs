@@ -27,12 +27,16 @@ internal sealed class ThresholdPointSelectionStrategy(
                 ? value.FillLevel
                 : 0f;
 
+            DateTime fillTimestamp = latest.TryGetValue(sensor.Id, out SensorLatestValue? timestampValue)
+                ? timestampValue.Timestamp
+                : DateTime.MinValue;
+
             if (fillLevel < threshold)
             {
                 continue;
             }
 
-            result.Add(new SelectedCollectionPoint(sensor.Id, sensor.NodeId, fillLevel));
+            result.Add(new SelectedCollectionPoint(sensor.Id, sensor.NodeId, fillLevel, fillTimestamp));
         }
 
         return result;

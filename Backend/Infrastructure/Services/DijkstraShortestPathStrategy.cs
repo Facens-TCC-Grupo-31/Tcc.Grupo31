@@ -14,6 +14,15 @@ internal sealed class DijkstraShortestPathStrategy(
         return ComputeShortestDistances(sourceNodeId, targetNodeIds, snapshot, ct);
     }
 
+    public async Task<IReadOnlyList<int>> GetShortestPathAsync(
+        int sourceNodeId,
+        int targetNodeId,
+        CancellationToken ct = default)
+    {
+        GraphSnapshot snapshot = await graphService.GetGraphSnapshotAsync(ct);
+        return ComputeShortestPath(sourceNodeId, targetNodeId, snapshot, ct);
+    }
+
     public async Task<IReadOnlyDictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
         IReadOnlyCollection<int> waypointNodeIds,
         CancellationToken ct = default)
@@ -106,5 +115,91 @@ internal sealed class DijkstraShortestPathStrategy(
         }
 
         return result;
+    }
+
+    private static IReadOnlyList<int> ComputeShortestPath(
+        int sourceNodeId,
+        int targetNodeId,
+        GraphSnapshot snapshot,
+        CancellationToken ct)
+    {
+        if (!snapshot.NodeIds.Contains(sourceNodeId))
+        {
+            throw new InvalidOperationException($"Source node {sourceNodeId} does not exist in graph.");
+        }
+
+        if (!snapshot.NodeIds.Contains(targetNodeId))
+        {
+            throw new InvalidOperationException($"Target node {targetNodeId} does not exist in graph.");
+        }
+
+        if (sourceNodeId == targetNodeId)
+        {
+            return [sourceNodeId];
+        }
+
+        var distances = snapshot.NodeIds.ToDictionary(nodeId => nodeId, _ => double.PositiveInfinity);
+        var previous = new Dictionary<int, int>();
+        distances[sourceNodeId] = 0;
+
+        var queue = new PriorityQueue<int, (double Distance, int NodeId)>();
+        queue.Enqueue(sourceNodeId, (0, sourceNodeId));
+
+        while (queue.TryDequeue(out int currentNodeId, out (double Distance, int NodeId) priority))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            double knownDistance = distances[currentNodeId];
+            if (priority.Distance > knownDistance)
+            {
+                continue;
+            }
+
+            if (currentNodeId == targetNodeId)
+            {
+                break;
+            }
+
+            if (!snapshot.AdjacencyByNode.TryGetValue(currentNodeId, out IReadOnlyList<GraphNeighbor>? outgoingEdges))
+            {
+                continue;
+            }
+
+            foreach (GraphNeighbor edge in outgoingEdges)
+            {
+                double newDistance = knownDistance + edge.Distance;
+                if (newDistance >= distances[edge.ToNodeId])
+                {
+                    continue;
+                }
+
+                distances[edge.ToNodeId] = newDistance;
+                previous[edge.ToNodeId] = currentNodeId;
+                queue.Enqueue(edge.ToNodeId, (newDistance, edge.ToNodeId));
+            }
+        }
+
+        if (double.IsInfinity(distances[targetNodeId]))
+        {
+            return [];
+        }
+
+        var path = new List<int>();
+        int cursor = targetNodeId;
+        path.Add(cursor);
+
+        while (cursor != sourceNodeId)
+        {
+            if (!previous.TryGetValue(cursor, out int nextCursor))
+            {
+                return [];
+            }
+
+            cursor = nextCursor;
+            path.Add(cursor);
+        }
+
+        path.Reverse();
+        return path;
     }
 }

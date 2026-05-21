@@ -21,22 +21,16 @@ internal sealed class DepotNodeService(
     {
         string graphSignature = await BuildGraphSignatureAsync(ct);
 
-        DepotNodeMapping? existing = await db.DepotNodeMappings
-            .AsNoTracking()
-            .Where(m => m.DepotKey == _options.DepotKey && m.GraphSignature == graphSignature)
-            .OrderByDescending(m => m.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
+        DepotNodeMapping? existing = await FindByKeyAndSignatureAsync(_options.DepotKey, graphSignature, ct);
         if (existing is not null)
         {
-            bool nodeExists = await db.GraphNodes
-                .AsNoTracking()
-                .AnyAsync(n => n.Id == existing.NodeId, ct);
+            return existing.NodeId;
+        }
 
-            if (nodeExists)
-            {
-                return existing.NodeId;
-            }
+        existing = await FindLatestByKeyAsync(_options.DepotKey, ct);
+        if (existing is not null)
+        {
+            return existing.NodeId;
         }
 
         using IDisposable? writeLock = graphService.TryAcquireWriteLock();
@@ -45,31 +39,30 @@ internal sealed class DepotNodeService(
             throw new InvalidOperationException("Failed to acquire graph lock for depot initialization.");
         }
 
-        existing = await db.DepotNodeMappings
-            .Where(m => m.DepotKey == _options.DepotKey && m.GraphSignature == graphSignature)
-            .OrderByDescending(m => m.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+        graphSignature = await BuildGraphSignatureAsync(ct);
 
+        existing = await FindByKeyAndSignatureAsync(_options.DepotKey, graphSignature, ct);
         if (existing is not null)
         {
-            bool nodeExists = await db.GraphNodes
-                .AsNoTracking()
-                .AnyAsync(n => n.Id == existing.NodeId, ct);
+            return existing.NodeId;
+        }
 
-            if (nodeExists)
-            {
-                return existing.NodeId;
-            }
+        existing = await FindLatestByKeyAsync(_options.DepotKey, ct);
+        if (existing is not null)
+        {
+            return existing.NodeId;
         }
 
         int nodeId = await graphService.ApplyNearestEdgeSplitAsync(
             new Position(_options.DepotLatitude, _options.DepotLongitude),
             async newNodeId =>
             {
+                string postSplitGraphSignature = await BuildGraphSignatureAsync(ct);
+
                 db.DepotNodeMappings.Add(new DepotNodeMapping
                 {
                     DepotKey = _options.DepotKey,
-                    GraphSignature = graphSignature,
+                    GraphSignature = postSplitGraphSignature,
                     Latitude = _options.DepotLatitude,
                     Longitude = _options.DepotLongitude,
                     NodeId = newNodeId,
@@ -82,12 +75,59 @@ internal sealed class DepotNodeService(
         );
 
         logger.LogInformation(
-            "Depot node {DepotNodeId} created for key {DepotKey} and graph signature {GraphSignature}",
+            "Depot node {DepotNodeId} created for key {DepotKey}",
             nodeId,
-            _options.DepotKey,
-            graphSignature);
+            _options.DepotKey);
 
         return nodeId;
+    }
+
+    private async Task<DepotNodeMapping?> FindByKeyAndSignatureAsync(
+        string depotKey,
+        string graphSignature,
+        CancellationToken ct)
+    {
+        DepotNodeMapping? existing = await db.DepotNodeMappings
+            .AsNoTracking()
+            .Where(m => m.DepotKey == depotKey && m.GraphSignature == graphSignature)
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing is null)
+        {
+            return null;
+        }
+
+        bool nodeExists = await db.GraphNodes
+            .AsNoTracking()
+            .AnyAsync(n => n.Id == existing.NodeId, ct);
+
+        return nodeExists ? existing : null;
+    }
+
+    private async Task<DepotNodeMapping?> FindLatestByKeyAsync(string depotKey, CancellationToken ct)
+    {
+        DepotNodeMapping? existing = await db.DepotNodeMappings
+            .AsNoTracking()
+            .Where(m => m.DepotKey == depotKey)
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing is null)
+        {
+            return null;
+        }
+
+        bool nodeExists = await db.GraphNodes
+            .AsNoTracking()
+            .AnyAsync(n => n.Id == existing.NodeId, ct);
+
+        if (!nodeExists)
+        {
+            return null;
+        }
+
+        return existing;
     }
 
     private async Task<string> BuildGraphSignatureAsync(CancellationToken ct)

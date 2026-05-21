@@ -7,6 +7,7 @@ public sealed record RoutePlanningRequest(
 public sealed record RoutePlanningResult(
     IReadOnlyList<int> NodeVisitOrder,
     IReadOnlyList<long> SensorVisitOrder,
+    IReadOnlyList<SelectedCollectionPoint> SelectedSensors,
     int SelectedBins,
     int VisitedBins,
     double TotalDistance,

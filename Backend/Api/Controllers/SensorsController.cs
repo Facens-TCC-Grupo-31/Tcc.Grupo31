@@ -99,6 +99,124 @@ public sealed class SensorsController(
         );
     }
 
+    [HttpPost("register/mock/batch")]
+    [ProducesResponseType<BatchMockRegistrationResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RegisterMockBatch(
+        [FromBody] BatchMockRegistrationRequestDto request,
+        CancellationToken ct)
+    {
+        if (request.Items is null || request.Items.Count == 0)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid batch request",
+                Detail = "items must contain at least one element.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        var results = new List<BatchMockRegistrationItemResultDto>(request.Items.Count);
+
+        for (int index = 0; index < request.Items.Count; index++)
+        {
+            MockRegistrationRequestDto item = request.Items[index];
+
+            if (TryBuildInvalidPositionProblem(item.Position, out ProblemDetails? positionProblem))
+            {
+                results.Add(new BatchMockRegistrationItemResultDto
+                {
+                    Index = index,
+                    Success = false,
+                    Error = positionProblem!.Detail
+                });
+
+                if (!request.ContinueOnError)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            if (item.BaselineDistanceMm <= 0)
+            {
+                results.Add(new BatchMockRegistrationItemResultDto
+                {
+                    Index = index,
+                    Success = false,
+                    Error = "baselineDistanceMm must be greater than 0."
+                });
+
+                if (!request.ContinueOnError)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            if (item.DesiredReadingMm <= 0)
+            {
+                results.Add(new BatchMockRegistrationItemResultDto
+                {
+                    Index = index,
+                    Success = false,
+                    Error = "desiredReadingMm must be greater than 0."
+                });
+
+                if (!request.ContinueOnError)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            try
+            {
+                RegistrationResponseDto itemResult = await registrationService.RequestMockRegistrationAsync(
+                    item.Position,
+                    item.BaselineDistanceMm,
+                    item.DesiredReadingMm,
+                    ct);
+
+                results.Add(new BatchMockRegistrationItemResultDto
+                {
+                    Index = index,
+                    Success = true,
+                    SensorId = itemResult.SensorId,
+                    ProvisioningToken = itemResult.ProvisioningToken
+                });
+            }
+            catch (Exception ex) when (ex is ArgumentOutOfRangeException || ex is InvalidOperationException)
+            {
+                results.Add(new BatchMockRegistrationItemResultDto
+                {
+                    Index = index,
+                    Success = false,
+                    Error = ex.Message
+                });
+
+                if (!request.ContinueOnError)
+                {
+                    break;
+                }
+            }
+        }
+
+        int succeededCount = results.Count(result => result.Success);
+        int failedCount = results.Count - succeededCount;
+
+        return Ok(new BatchMockRegistrationResponseDto
+        {
+            RequestedCount = request.Items.Count,
+            SucceededCount = succeededCount,
+            FailedCount = failedCount,
+            Results = results
+        });
+    }
+
     [HttpGet("{sensorId:long}/latest")]
     [ProducesResponseType<ReadingDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
