@@ -6,7 +6,7 @@ namespace Application.Services;
 public interface ISensorRegistrationService
 {
     Task<RegistrationResponseDto> RequestRegistrationAsync(
-        Position position,
+        Position? position,
         CancellationToken ct = default
     );
 

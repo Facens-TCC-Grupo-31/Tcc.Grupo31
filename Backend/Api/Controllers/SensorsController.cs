@@ -15,16 +15,17 @@ public sealed class SensorsController(
     [ProducesResponseType<RegistrationResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register(
-        [FromBody] RegistrationRequestDto request,
+        [FromBody] RegistrationRequestDto? request,
         CancellationToken ct)
     {
-        if (TryBuildInvalidPositionProblem(request.Position, out ProblemDetails? problem))
+        if (request?.Position is not null &&
+            TryBuildInvalidPositionProblem(request.Position, out ProblemDetails? problem))
         {
             return BadRequest(problem);
         }
 
         var result = await registrationService.RequestRegistrationAsync(
-            request.Position,
+            request?.Position,
             ct
         );
 
@@ -186,7 +187,10 @@ public sealed class SensorsController(
                     Index = index,
                     Success = true,
                     SensorId = itemResult.SensorId,
-                    ProvisioningToken = itemResult.ProvisioningToken
+                    ProvisioningToken = itemResult.ProvisioningToken,
+                    MqttBrokerUri = itemResult.MqttBrokerUri,
+                    Ssid = itemResult.Ssid,
+                    Password = itemResult.Password
                 });
             }
             catch (Exception ex) when (ex is ArgumentOutOfRangeException || ex is InvalidOperationException)

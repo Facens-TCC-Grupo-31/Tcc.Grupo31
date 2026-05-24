@@ -20,5 +20,8 @@ public sealed class BatchMockRegistrationItemResultDto
     public required bool Success { get; init; }
     public long? SensorId { get; init; }
     public string? ProvisioningToken { get; init; }
+    public string? MqttBrokerUri { get; init; }
+    public string Ssid { get; init; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
     public string? Error { get; init; }
 }

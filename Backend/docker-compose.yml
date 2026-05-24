@@ -59,6 +59,7 @@ services:
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=tcc;Username=postgres;Password=postgres"
       Redis__Configuration: "redis:6379"
       Mqtt__Broker: "mosquitto"
+      Mqtt__ExternalBrokerHost: "host.docker.internal"
       Mqtt__Port: "1883"
       MockRuntime__Enabled: "true"
       MockRuntime__ExecutablePath: "/app/mock-runtime/pc_telemetry_runner"

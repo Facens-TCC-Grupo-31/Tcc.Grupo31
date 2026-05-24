@@ -4,6 +4,7 @@
 #include <optional>
 #include <atomic>
 #include <cstring>
+#include <cerrno>
 #include <vector>
 #include <algorithm>
 
@@ -295,7 +296,16 @@ class MqttSampleGateway : public Gateway<SampleData>
                 ESP_LOGE(TAG, "MQTT connection refused, return code=%d", err->connect_return_code);
             }
 
-            (void)app_dispatcher_post_event(self->context_, APP_EVENT_MQTT_FAILED);
+            const bool hard_failure =
+                err->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED ||
+                err->esp_tls_last_esp_err != 0 ||
+                err->esp_transport_sock_errno == ECONNREFUSED ||
+                err->esp_transport_sock_errno == EHOSTUNREACH ||
+                err->esp_transport_sock_errno == ENETUNREACH ||
+                err->esp_transport_sock_errno == ETIMEDOUT;
+
+            (void)app_dispatcher_post_event(self->context_,
+                                            hard_failure ? APP_EVENT_MQTT_FAILED_HARD : APP_EVENT_MQTT_FAILED);
         }
     }
 

@@ -4,8 +4,13 @@ using Application.Services;
 using Domain.Entities;
 using Domain.ValueObjects;
 using Infrastructure.Database;
+using Infrastructure.Mqtt.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 
 namespace Infrastructure.Services;
 
@@ -13,13 +18,14 @@ internal sealed class SensorRegistrationService(
     AppDbContext db,
     IProvisioningDataCache provisioningDataCache,
     IGraphService graphService,
+    IOptions<MqttOptions> mqttOptions,
     ILogger<SensorRegistrationService> logger,
     IMockSensorRuntimeNotifier? mockSensorRuntimeNotifier = null) : ISensorRegistrationService
 {
     private const string MockCalibrationMethod = "mock";
 
     public async Task<RegistrationResponseDto> RequestRegistrationAsync(
-        Position position,
+        Position? position,
         CancellationToken ct = default)
     {
         var sensor = new Sensor
@@ -37,17 +43,26 @@ internal sealed class SensorRegistrationService(
             new ProvisioningRegistrationContext(token, position),
             ct);
 
-        logger.LogInformation(
-            "Registration requested for sensor {SensorId} at (lat={Latitude}, lon={Longitude})",
-            sensor.Id,
-            position.Latitude,
-            position.Longitude
-        );
+        if (position is not null)
+            logger.LogInformation(
+                "Registration requested for sensor {SensorId} at (lat={Latitude}, lon={Longitude})",
+                sensor.Id,
+                position.Latitude,
+                position.Longitude
+            );
+        else
+            logger.LogInformation(
+                "Registration requested for sensor {SensorId} (no position provided)",
+                sensor.Id
+            );
 
         return new RegistrationResponseDto
         {
             SensorId = sensor.Id,
-            ProvisioningToken = token
+            ProvisioningToken = token,
+            MqttBrokerUri = BuildMqttBrokerUri(),
+            Ssid = string.Empty,
+            Password = string.Empty
         };
     }
 
@@ -139,7 +154,10 @@ internal sealed class SensorRegistrationService(
         return new RegistrationResponseDto
         {
             SensorId = sensor.Id,
-            ProvisioningToken = string.Empty
+            ProvisioningToken = "test",
+            MqttBrokerUri = BuildMqttBrokerUri(),
+            Ssid = string.Empty,
+            Password = string.Empty
         };
     }
 
@@ -199,6 +217,14 @@ internal sealed class SensorRegistrationService(
             return false;
         }
 
+        if (registrationContext.Position is null)
+        {
+            logger.LogWarning(
+                "Cannot complete registration for sensor {SensorId}: no position was provided during registration",
+                sensorId);
+            return false;
+        }
+
         try
         {
             await graphService.ApplyNearestEdgeSplitAsync(
@@ -247,5 +273,44 @@ internal sealed class SensorRegistrationService(
         );
 
         return true;
+    }
+
+    private string BuildMqttBrokerUri()
+    {
+        MqttOptions opts = mqttOptions.Value;
+
+        if (string.IsNullOrWhiteSpace(opts.Broker) || opts.Port == 0)
+            throw new InvalidOperationException("MQTT broker configuration is invalid.");
+
+        string host = string.IsNullOrWhiteSpace(opts.ExternalBrokerHost)
+            ? opts.Broker
+            : opts.ExternalBrokerHost;
+
+        if (host.Equals("host.docker.internal", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                IPAddress? resolved = Dns
+                    .GetHostAddresses(host)
+                    .FirstOrDefault(address => address.AddressFamily == AddressFamily.InterNetwork);
+
+                if (resolved is not null)
+                {
+                    host = resolved.ToString();
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "host.docker.internal did not resolve to an IPv4 address; using host name in provisioning URI");
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Failed to resolve host.docker.internal; using host name in provisioning URI");
+            }
+        }
+
+        return $"mqtt://{host}:{opts.Port}";
     }
 }

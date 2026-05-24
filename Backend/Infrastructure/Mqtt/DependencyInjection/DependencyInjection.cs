@@ -14,6 +14,8 @@ public static class DependencyInjection
             .AddOptions<MqttOptions>()
             .Configure(options => mqttSection.Bind(options))
             .Validate(options => !string.IsNullOrWhiteSpace(options.Broker), "Mqtt:Broker is required")
+            .Validate(options => options.ExternalBrokerHost is null || !string.IsNullOrWhiteSpace(options.ExternalBrokerHost),
+                "Mqtt:ExternalBrokerHost cannot be empty when provided")
             .Validate(options => options.Port > 0, "Mqtt:Port must be greater than zero")
             .ValidateOnStart();
 

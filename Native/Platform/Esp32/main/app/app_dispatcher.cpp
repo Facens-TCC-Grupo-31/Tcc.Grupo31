@@ -7,6 +7,7 @@
 #include "../storage/config_store.h"
 
 static const char *TAG = "AppFsm";
+static constexpr uint8_t MAX_FAILURE_CYCLES_BEFORE_RESET = 3;
 
 static const char *state_to_string(app_state_t state)
 {
@@ -42,12 +43,26 @@ static void handle_event(app_context_t *context, app_event_t event)
         return;
     }
 
+    if (event == APP_EVENT_RESET_TO_PROVISIONING)
+    {
+        ESP_LOGW(TAG,
+                 "Resetting to provisioning (wifi failure cycles=%u, mqtt hard failure cycles=%u)",
+                 context->wifi_failure_cycles,
+                 context->mqtt_hard_failure_cycles);
+        ESP_ERROR_CHECK(app_config_erase());
+        esp_restart();
+        return;
+    }
+
     switch (context->current_state)
     {
     case APP_STATE_UNPROVISIONED:
     case APP_STATE_PROVISIONING:
         if (event == APP_EVENT_PROVISIONING_DONE)
         {
+            context->wifi_failure_cycles = 0;
+            context->mqtt_hard_failure_cycles = 0;
+            context->last_error_cause = APP_ERROR_CAUSE_NONE;
             app_dispatcher_transition_to(context, APP_STATE_CONNECTING_WIFI, event);
         }
         break;
@@ -55,17 +70,46 @@ static void handle_event(app_context_t *context, app_event_t event)
     case APP_STATE_CONNECTING_WIFI:
         if (event == APP_EVENT_WIFI_CONNECTED)
         {
+            context->wifi_failure_cycles = 0;
+            context->last_error_cause = APP_ERROR_CAUSE_NONE;
             app_dispatcher_transition_to(context, APP_STATE_OPERATIONAL, event);
         }
         else if (event == APP_EVENT_WIFI_FAILED)
         {
+            if (context->wifi_failure_cycles < 255)
+            {
+                ++context->wifi_failure_cycles;
+            }
+            context->last_error_cause = APP_ERROR_CAUSE_WIFI;
+            ESP_LOGW(TAG,
+                     "Wi-Fi failure cycle %u/%u",
+                     context->wifi_failure_cycles,
+                     MAX_FAILURE_CYCLES_BEFORE_RESET);
             app_dispatcher_transition_to(context, APP_STATE_ERROR, event);
         }
         break;
 
     case APP_STATE_OPERATIONAL:
-        if (event == APP_EVENT_WIFI_FAILED || event == APP_EVENT_MQTT_FAILED)
+        if (event == APP_EVENT_MQTT_CONNECTED)
         {
+            context->mqtt_hard_failure_cycles = 0;
+            context->last_error_cause = APP_ERROR_CAUSE_NONE;
+        }
+        else if (event == APP_EVENT_WIFI_FAILED || event == APP_EVENT_MQTT_FAILED)
+        {
+            app_dispatcher_transition_to(context, APP_STATE_ERROR, event);
+        }
+        else if (event == APP_EVENT_MQTT_FAILED_HARD)
+        {
+            if (context->mqtt_hard_failure_cycles < 255)
+            {
+                ++context->mqtt_hard_failure_cycles;
+            }
+            context->last_error_cause = APP_ERROR_CAUSE_MQTT_HARD;
+            ESP_LOGW(TAG,
+                     "MQTT hard failure cycle %u/%u",
+                     context->mqtt_hard_failure_cycles,
+                     MAX_FAILURE_CYCLES_BEFORE_RESET);
             app_dispatcher_transition_to(context, APP_STATE_ERROR, event);
         }
         break;

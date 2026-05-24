@@ -3,16 +3,24 @@ using Application.Services;
 using Api.Services;
 using Infrastructure.Common;
 using Infrastructure.Database;
+using Infrastructure.Mqtt.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
+    });
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddMqtt(builder.Configuration);
 
 builder.Services
     .AddOptions<MockRuntimeOptions>()
