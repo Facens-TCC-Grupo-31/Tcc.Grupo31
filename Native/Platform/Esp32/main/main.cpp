@@ -56,8 +56,6 @@ static EventGroupHandle_t s_wifi_event_group = nullptr;
 static bool s_wifi_stack_initialized = false;
 static constexpr int WIFI_CONNECTED_BIT = BIT0;
 static constexpr int WIFI_FAIL_BIT = BIT1;
-static constexpr int MAX_WIFI_RETRIES = 10;
-static int s_wifi_retry_count = 0;
 
 #ifndef APP_FACTORY_RESET_GPIO
 #define APP_FACTORY_RESET_GPIO GPIO_NUM_0
@@ -141,24 +139,16 @@ static void wifi_event_handler(void *, esp_event_base_t event_base, int32_t even
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         auto *event = static_cast<wifi_event_sta_disconnected_t *>(event_data);
-        if (s_wifi_retry_count < MAX_WIFI_RETRIES)
-        {
-            ++s_wifi_retry_count;
-            ESP_LOGW(TAG, "Wi-Fi disconnected (reason=%d), retry %d/%d", event->reason, s_wifi_retry_count, MAX_WIFI_RETRIES);
-            esp_wifi_connect();
-            return;
-        }
-
+        const int reason = (event != nullptr) ? event->reason : -1;
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         (void)app_dispatcher_post_event(&s_app_context, APP_EVENT_WIFI_FAILED);
-        ESP_LOGE(TAG, "Wi-Fi failed to connect to SSID '%s' after %d retries", s_wifi_ssid, MAX_WIFI_RETRIES);
+        ESP_LOGE(TAG, "Wi-Fi disconnected during connection attempt (reason=%d)", reason);
         return;
     }
 
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         auto *event = static_cast<ip_event_got_ip_t *>(event_data);
-        s_wifi_retry_count = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         (void)app_dispatcher_post_event(&s_app_context, APP_EVENT_WIFI_CONNECTED);
         ESP_LOGI(TAG, "Wi-Fi connected, got IP: " IPSTR ", netmask: " IPSTR ", gateway: " IPSTR,
@@ -220,6 +210,7 @@ static esp_err_t init_wifi_station()
     (void)esp_wifi_stop();
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "esp_wifi_set_mode failed");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "esp_wifi_set_config failed");
+    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
     const esp_err_t start_err = esp_wifi_start();
     if (start_err != ESP_OK && start_err != ESP_ERR_WIFI_CONN)
     {
@@ -242,7 +233,6 @@ static esp_err_t init_wifi_station()
 
     if (bits & WIFI_FAIL_BIT)
     {
-        (void)app_dispatcher_post_event(&s_app_context, APP_EVENT_WIFI_FAILED);
         return ESP_FAIL;
     }
 

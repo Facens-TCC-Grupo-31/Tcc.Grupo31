@@ -52,7 +52,7 @@ static void run(app_context_t *context)
             return;
         }
 
-        (void)app_dispatcher_post_event(context, APP_EVENT_TIMEOUT);
+        (void)app_dispatcher_post_event(context, APP_EVENT_RETRY_NEXT_ATTEMPT);
     }
 }
 

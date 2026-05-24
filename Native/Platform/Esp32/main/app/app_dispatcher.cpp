@@ -115,7 +115,7 @@ static void handle_event(app_context_t *context, app_event_t event)
         break;
 
     case APP_STATE_ERROR:
-        if (event == APP_EVENT_TIMEOUT)
+        if (event == APP_EVENT_RETRY_NEXT_ATTEMPT)
         {
             app_dispatcher_transition_to(context, APP_STATE_CONNECTING_WIFI, event);
         }

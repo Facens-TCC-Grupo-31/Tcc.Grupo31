@@ -11,6 +11,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_log.h>
+#include <esp_idf_version.h>
 #include <mqtt_client.h>
 #include <driver/gpio.h>
 #include <esp_rom_sys.h>
@@ -323,6 +324,11 @@ public:
 
         esp_mqtt_client_config_t config = {};
         config.broker.address.uri = broker_uri_;
+    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        config.network.disable_auto_reconnect = true;
+    #else
+        config.disable_auto_reconnect = true;
+    #endif
 
         ESP_LOGI(TAG, "Initializing MQTT client for broker %s", broker_uri_);
 
