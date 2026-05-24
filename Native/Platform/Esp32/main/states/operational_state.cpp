@@ -169,7 +169,7 @@ public:
             return std::nullopt;
         }
 
-        ESP_LOGI(TAG, "Sampled distance: %d mm", distance_mm);
+        ESP_LOGD(TAG, "Sampled distance: %d mm", distance_mm);
         return SampleData
         {
             .distance_mm = distance_mm,
@@ -211,7 +211,7 @@ protected:
             std::optional<SampleData> sample = reader().read();
             if (!sample.has_value())
             {
-                ESP_LOGW(TAG, "Burst acquisition failed at index %d", static_cast<int>(i));
+                ESP_LOGD(TAG, "Burst acquisition failed at index %d", static_cast<int>(i));
                 return std::nullopt;
             }
 
@@ -227,7 +227,7 @@ protected:
         std::sort(distances.begin(), distances.end());
         const int median_distance_mm = distances[distances.size() / 2];
 
-        ESP_LOGI(TAG, "Burst median distance: %d mm from %d samples", median_distance_mm, static_cast<int>(burst_sample_count_));
+        ESP_LOGD(TAG, "Burst median distance: %d mm from %d samples", median_distance_mm, static_cast<int>(burst_sample_count_));
 
         return SampleData{
             .distance_mm = median_distance_mm,
@@ -271,7 +271,7 @@ class MqttSampleGateway : public Gateway<SampleData>
         {
             self->connected_.store(false);
             (void)app_dispatcher_post_event(self->context_, APP_EVENT_MQTT_FAILED);
-            ESP_LOGW(TAG, "Disconnected from MQTT broker at %s", self->broker_uri_);
+            ESP_LOGD(TAG, "Disconnected from MQTT broker at %s", self->broker_uri_);
             return;
         }
 
@@ -294,7 +294,7 @@ class MqttSampleGateway : public Gateway<SampleData>
                      std::strerror(err->esp_transport_sock_errno));
             if (err->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED)
             {
-                ESP_LOGE(TAG, "MQTT connection refused, return code=%d", err->connect_return_code);
+                ESP_LOGD(TAG, "MQTT connection refused, return code=%d", err->connect_return_code);
             }
 
             const bool hard_failure =
@@ -350,7 +350,7 @@ public:
     {
         if (!connected_.load())
         {
-            ESP_LOGW(TAG, "Skipping publish because MQTT client is not connected yet");
+            ESP_LOGD(TAG, "Skipping publish because MQTT client is not connected yet");
             return;
         }
 
@@ -399,7 +399,7 @@ public:
 
         if (message_id >= 0)
         {
-            ESP_LOGI(TAG, "Published telemetry distance %d mm for sensor %s", data.distance_mm, sensor_id_);
+            ESP_LOGD(TAG, "Published telemetry distance %d mm for sensor %s", data.distance_mm, sensor_id_);
             return;
         }
 
@@ -411,7 +411,7 @@ static std::unique_ptr<EspFeeder<SampleData>> s_feeder;
 
 static void enter(app_context_t *)
 {
-    ESP_LOGI(TAG, "Entering operational state");
+    ESP_LOGD(TAG, "Entering operational state");
 }
 
 static void run(app_context_t *context)
@@ -430,7 +430,7 @@ static void run(app_context_t *context)
         TELEMETRY_INTERVAL_MS
     );
     s_feeder->start();
-    ESP_LOGI(TAG, "Operational workload started");
+    ESP_LOGD(TAG, "Operational workload started");
 }
 
 static void exit(app_context_t *)
@@ -440,7 +440,7 @@ static void exit(app_context_t *)
         s_feeder->stop();
         s_feeder.reset();
     }
-    ESP_LOGI(TAG, "Exiting operational state");
+    ESP_LOGD(TAG, "Exiting operational state");
 }
 
 state_handler_t operational_state_handler(void)

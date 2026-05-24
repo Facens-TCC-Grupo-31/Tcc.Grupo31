@@ -663,7 +663,7 @@ esp_err_t provisioning_transport_submit_ble_payload(const provisioning_payload_t
     }
 
     s_has_pending_payload = true;
-    ESP_LOGI(TAG, "Provisioning payload submitted through BLE transport seam");
+    ESP_LOGD(TAG, "Provisioning payload submitted through BLE transport seam");
     set_status("ok:accepted");
     return ESP_OK;
 }

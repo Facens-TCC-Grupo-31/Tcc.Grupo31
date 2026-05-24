@@ -131,7 +131,7 @@ static void wifi_event_handler(void *, esp_event_base_t event_base, int32_t even
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
-        ESP_LOGI(TAG, "Wi-Fi station started, connecting to SSID '%s'", s_wifi_ssid);
+        ESP_LOGD(TAG, "Wi-Fi station started, connecting to SSID '%s'", s_wifi_ssid);
         esp_wifi_connect();
         return;
     }
@@ -142,7 +142,7 @@ static void wifi_event_handler(void *, esp_event_base_t event_base, int32_t even
         const int reason = (event != nullptr) ? event->reason : -1;
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         (void)app_dispatcher_post_event(&s_app_context, APP_EVENT_WIFI_FAILED);
-        ESP_LOGE(TAG, "Wi-Fi disconnected during connection attempt (reason=%d)", reason);
+        ESP_LOGD(TAG, "Wi-Fi disconnected during connection attempt (reason=%d)", reason);
         return;
     }
 
@@ -217,7 +217,7 @@ static esp_err_t init_wifi_station()
         return start_err;
     }
 
-    ESP_LOGI(TAG, "Wi-Fi init complete, waiting for connection...");
+    ESP_LOGD(TAG, "Wi-Fi init complete, waiting for connection...");
 
     const EventBits_t bits = xEventGroupWaitBits(
         s_wifi_event_group,

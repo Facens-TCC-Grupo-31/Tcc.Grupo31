@@ -23,7 +23,7 @@ static void copy_string(char *destination, size_t destination_size, const char *
 
 static void enter(app_context_t *)
 {
-    ESP_LOGI(TAG, "Entering provisioning state");
+    ESP_LOGD(TAG, "Entering provisioning state");
     const esp_err_t err = provisioning_transport_start_ble();
     if (err != ESP_OK)
     {
@@ -77,7 +77,7 @@ static void run(app_context_t *context)
 static void exit(app_context_t *)
 {
     (void)provisioning_transport_stop_ble();
-    ESP_LOGI(TAG, "Exiting provisioning state");
+    ESP_LOGD(TAG, "Exiting provisioning state");
 }
 
 state_handler_t provisioning_state_handler(void)

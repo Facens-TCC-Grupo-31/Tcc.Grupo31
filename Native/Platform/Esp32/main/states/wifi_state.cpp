@@ -10,7 +10,7 @@ static bool s_attempted_connect = false;
 static void enter(app_context_t *)
 {
     s_attempted_connect = false;
-    ESP_LOGI(TAG, "Entering Wi-Fi connection state");
+    ESP_LOGD(TAG, "Entering Wi-Fi connection state");
 }
 
 static void run(app_context_t *context)
@@ -36,7 +36,7 @@ static void run(app_context_t *context)
 
 static void exit(app_context_t *)
 {
-    ESP_LOGI(TAG, "Exiting Wi-Fi connection state");
+    ESP_LOGD(TAG, "Exiting Wi-Fi connection state");
 }
 
 state_handler_t wifi_state_handler(void)

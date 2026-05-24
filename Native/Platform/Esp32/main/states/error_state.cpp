@@ -19,7 +19,7 @@ static void enter(app_context_t *context)
     {
         context->error_enter_tick = xTaskGetTickCount();
     }
-    ESP_LOGE(TAG, "Entering error state");
+    ESP_LOGD(TAG, "Entering error state");
 }
 
 static void run(app_context_t *context)
@@ -58,7 +58,7 @@ static void run(app_context_t *context)
 
 static void exit(app_context_t *)
 {
-    ESP_LOGI(TAG, "Exiting error state");
+    ESP_LOGD(TAG, "Exiting error state");
 }
 
 state_handler_t error_state_handler(void)

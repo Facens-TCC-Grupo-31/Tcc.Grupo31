@@ -37,7 +37,7 @@ static void handle_event(app_context_t *context, app_event_t event)
 
     if (event == APP_EVENT_FACTORY_RESET)
     {
-        ESP_LOGW(TAG, "Factory reset event received");
+        ESP_LOGD(TAG, "Factory reset event received");
         ESP_ERROR_CHECK(app_config_erase());
         esp_restart();
         return;
@@ -190,7 +190,7 @@ void app_dispatcher_transition_to(app_context_t *context, app_state_t next_state
 
     context->current_state = next_state;
 
-    ESP_LOGI(TAG, "Transition %s -> %s", state_to_string(previous), state_to_string(next_state));
+    ESP_LOGD(TAG, "Transition %s -> %s", state_to_string(previous), state_to_string(next_state));
 
     auto &next_handler = context->handlers[next_state];
     if (next_handler.enter != nullptr)
