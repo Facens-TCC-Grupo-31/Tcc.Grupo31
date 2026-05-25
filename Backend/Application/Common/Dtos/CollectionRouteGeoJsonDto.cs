@@ -14,7 +14,7 @@ public sealed class CollectionRouteGeoJsonDto
         };
 
         features.AddRange(route.SelectedSensors.Select(BuildSensorFeature));
-        features.AddRange(BuildStopFeatures(route.SelectedSensors));
+        features.AddRange(BuildStopFeatures(route.Stops));
 
         return new CollectionRouteGeoJsonDto
         {
@@ -85,23 +85,22 @@ public sealed class CollectionRouteGeoJsonDto
     }
 
     private static IReadOnlyList<CollectionRouteGeoJsonFeatureDto> BuildStopFeatures(
-        IReadOnlyList<CollectionRouteSelectedSensorDto> sensors)
+        IReadOnlyList<CollectionRouteStopDto> stops)
     {
-        return sensors
-            .GroupBy(sensor => sensor.NodeId)
-            .Select(group => group.First())
-            .Select(sensor => new CollectionRouteGeoJsonFeatureDto
+        return stops
+            .Select(stop => new CollectionRouteGeoJsonFeatureDto
             {
                 Type = "Feature",
                 Geometry = new CollectionRouteGeoJsonGeometryDto
                 {
                     Type = "Point",
-                    Coordinates = (IReadOnlyList<double>)[sensor.Position.Longitude, sensor.Position.Latitude]
+                    Coordinates = (IReadOnlyList<double>)[stop.Position.Longitude, stop.Position.Latitude]
                 },
                 Properties = new Dictionary<string, object?>
                 {
                     ["layer"] = "stop",
-                    ["nodeId"] = sensor.NodeId
+                    ["stopIndex"] = stop.StopIndex,
+                    ["nodeId"] = stop.NodeId
                 }
             })
             .ToList();

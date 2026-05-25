@@ -1,5 +1,4 @@
 using Application.Services;
-using System.Diagnostics;
 
 namespace Infrastructure.Services;
 
@@ -22,10 +21,8 @@ internal sealed class ThresholdNearestNeighborMetricTspPlanner(
         var matrixNodes = new List<int>(targetNodeIds.Count + 1) { request.DepotNodeId };
         matrixNodes.AddRange(targetNodeIds);
 
-        var matrixSw = Stopwatch.StartNew();
         IReadOnlyDictionary<(int From, int To), double> matrix =
             await shortestPathStrategy.BuildDistanceMatrixAsync(matrixNodes, ct);
-        matrixSw.Stop();
 
         IReadOnlyList<int> nodeVisitOrder = routeOrderingStrategy.BuildRoute(
             request.DepotNodeId,
@@ -73,19 +70,9 @@ internal sealed class ThresholdNearestNeighborMetricTspPlanner(
             totalDistance += distance;
         }
 
-        var finiteDistances = matrix
-            .Where(x => x.Key.From != x.Key.To && !double.IsInfinity(x.Value))
-            .Select(x => x.Value)
-            .ToList();
-
         return new RoutePlanningResult(
             nodeVisitOrder,
-            sensorVisitOrder,
             orderedSelectedSensors,
-            selectedPoints.Count,
-            sensorVisitOrder.Count,
-            totalDistance,
-            finiteDistances.Count == 0 ? 0 : finiteDistances.Average(),
-            matrixSw.Elapsed.TotalMilliseconds);
+            totalDistance);
     }
 }

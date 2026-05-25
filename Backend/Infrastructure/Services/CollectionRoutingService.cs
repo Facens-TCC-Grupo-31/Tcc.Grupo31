@@ -40,6 +40,7 @@ internal sealed class CollectionRoutingService(
             .ToList();
 
         var nodeIdsToLoad = expandedNodeIds
+            .Concat(orderedNodeIds)
             .Concat(selectedSensorNodeIds)
             .Distinct()
             .ToList();
@@ -66,12 +67,22 @@ internal sealed class CollectionRoutingService(
             })
             .ToList();
 
+        var stops = orderedNodeIds
+            .Select((nodeId, index) => new CollectionRouteStopDto
+            {
+                StopIndex = index,
+                NodeId = nodeId,
+                Position = nodePositionMap[nodeId]
+            })
+            .ToList();
+
         totalSw.Stop();
 
         return new CollectionRouteResponseDto
         {
             DepotCoordinates = depotNode.Position,
             OrderedNodeCoordinates = orderedNodeCoordinates,
+            Stops = stops,
             SelectedSensors = selectedSensors,
             TotalDistance = planningResult.TotalDistance,
             RouteGenerationMs = totalSw.Elapsed.TotalMilliseconds
