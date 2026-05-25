@@ -22,4 +22,7 @@ internal sealed class RedisSensorLivenessCache(
 
     public Task<bool> IsAliveAsync(long sensorId, CancellationToken ct = default)
         => Db.KeyExistsAsync(Key(sensorId));
+
+    public Task RemoveAsync(long sensorId, CancellationToken ct = default)
+        => Db.KeyDeleteAsync(Key(sensorId));
 }

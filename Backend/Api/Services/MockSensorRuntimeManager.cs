@@ -40,6 +40,35 @@ public sealed class MockSensorRuntimeManager(
         await StartProcessAsync(sensorId, desiredReadingMm, ct);
     }
 
+    public Task StopMockSensorAsync(long sensorId, CancellationToken ct = default)
+    {
+        _ = ct;
+
+        if (!_processBySensorId.TryRemove(sensorId, out Process? process))
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to stop mock process for sensor {SensorId}", sensorId);
+        }
+        finally
+        {
+            process.Dispose();
+        }
+
+        logger.LogInformation("Stopped mock process for sensor {SensorId}", sensorId);
+        return Task.CompletedTask;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)

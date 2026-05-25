@@ -358,5 +358,11 @@ public sealed class CollectionRoutingFlowTests
         {
             return Task.FromResult((IReadOnlyDictionary<long, SensorLatestValue>)new Dictionary<long, SensorLatestValue>(_values));
         }
+
+        public Task RemoveAsync(long sensorId, CancellationToken ct = default)
+        {
+            _values.Remove(sensorId);
+            return Task.CompletedTask;
+        }
     }
 }

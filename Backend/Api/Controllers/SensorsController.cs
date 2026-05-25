@@ -9,23 +9,24 @@ namespace Api.Controllers;
 [Route("api/sensor-nodes")]
 public sealed class SensorsController(
     ISensorRegistrationService registrationService,
-    IReadingService readingService) : ControllerBase
+    IReadingService readingService,
+    ISensorQueryService sensorQueryService,
+    ISensorLifecycleService sensorLifecycleService) : ControllerBase
 {
     [HttpPost("register")]
     [ProducesResponseType<RegistrationResponseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register(
-        [FromBody] RegistrationRequestDto? request,
+        [FromBody] RegistrationRequestDto request,
         CancellationToken ct)
     {
-        if (request?.Position is not null &&
-            TryBuildInvalidPositionProblem(request.Position, out ProblemDetails? problem))
+        if (TryBuildInvalidPositionProblem(request.Position, out ProblemDetails? problem))
         {
             return BadRequest(problem);
         }
 
         var result = await registrationService.RequestRegistrationAsync(
-            request?.Position,
+            request.Position,
             ct
         );
 
@@ -235,6 +236,70 @@ public sealed class SensorsController(
         return Ok(latest);
     }
 
+    [HttpGet]
+    [ProducesResponseType<SensorNodePagedResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetSensors(
+        [FromQuery] GetSensorsQueryParams queryParams,
+        CancellationToken ct)
+    {
+        if (queryParams.CurrentPageNumber <= 0)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid page number",
+                Detail = "currentPageNumber must be greater than 0.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        if (queryParams.PageSize <= 0)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid page size",
+                Detail = "pageSize must be greater than 0.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        SensorNodePagedResponseDto response = await sensorQueryService.GetPagedAsync(
+            queryParams.CurrentPageNumber,
+            queryParams.PageSize,
+            ct);
+
+        return Ok(response);
+    }
+
+    [HttpGet("{sensorId:long}")]
+    [ProducesResponseType<SensorNodeDetailDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSensorById(long sensorId, CancellationToken ct)
+    {
+        SensorNodeDetailDto? sensor = await sensorQueryService.GetByIdAsync(sensorId, ct);
+        if (sensor is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(sensor);
+    }
+
+    // TODO: add explicit, safeguarded graph-node removal workflow for sensor deletion once node provenance is tracked reliably.
+    [HttpDelete("{sensorId:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteSensor(long sensorId, CancellationToken ct)
+    {
+        bool deleted = await sensorLifecycleService.DeleteAsync(sensorId, ct);
+        if (!deleted)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
+    }
+
     [HttpGet("{sensorId:long}/readings")]
     [ProducesResponseType<IReadOnlyList<ReadingDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -270,6 +335,8 @@ public sealed class SensorsController(
 
         return Ok(response);
     }
+
+    public record GetSensorsQueryParams(int CurrentPageNumber = 1, int PageSize = 20);
 
     public record GetReadingsQueryParams(DateTime? From, DateTime? To);
 

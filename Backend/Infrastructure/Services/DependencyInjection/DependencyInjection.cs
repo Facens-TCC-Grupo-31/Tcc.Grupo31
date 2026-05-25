@@ -30,6 +30,8 @@ public static class DependencyInjection
 
         services.AddScoped<IGraphService, GraphService>()
             .AddScoped<IReadingService, ReadingService>()
+            .AddScoped<ISensorQueryService, SensorQueryService>()
+            .AddScoped<ISensorLifecycleService, SensorLifecycleService>()
             .AddScoped<ISensorRegistrationService, SensorRegistrationService>()
             .AddScoped<IPointSelectionStrategy, ThresholdPointSelectionStrategy>()
             .AddScoped<IShortestPathStrategy, DijkstraShortestPathStrategy>()

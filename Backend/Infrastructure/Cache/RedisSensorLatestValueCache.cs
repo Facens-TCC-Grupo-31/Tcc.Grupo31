@@ -35,6 +35,9 @@ internal sealed class RedisSensorLatestValueCache(IConnectionMultiplexer redis) 
         return result;
     }
 
+    public Task RemoveAsync(long sensorId, CancellationToken ct = default)
+        => Db.HashDeleteAsync(HashKey, sensorId.ToString(CultureInfo.InvariantCulture));
+
     private static SensorLatestValue Deserialize(string raw)
     {
         using var doc = JsonDocument.Parse(raw);

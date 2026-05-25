@@ -4,5 +4,5 @@ namespace Application.Common.Dtos;
 
 public sealed class RegistrationRequestDto
 {
-    public Position? Position { get; init; }
+    public required Position Position { get; init; }
 }
