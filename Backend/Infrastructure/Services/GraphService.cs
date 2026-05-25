@@ -58,6 +58,34 @@ internal sealed class GraphService(
         }
     }
 
+    public async Task<GraphEdgeProjection> ProjectOntoNearestEdgeAsync(
+        Position position,
+        CancellationToken ct = default)
+    {
+        await EnsureLoadedAsync(ct);
+
+        if (Edges.Count == 0)
+        {
+            throw new InvalidOperationException("No graph edges available for nearest-edge projection.");
+        }
+
+        var (edge, projectedLongitude, projectedLatitude) = FindNearestEdge(position.Longitude, position.Latitude);
+
+        GraphNode fromNode = Nodes[edge.FromNodeId];
+        GraphNode toNode = Nodes[edge.ToNodeId];
+
+        bool hasReverseEdge = Edges.Values.Any(
+            e => e.FromNodeId == edge.ToNodeId && e.ToNodeId == edge.FromNodeId);
+
+        return new GraphEdgeProjection(
+            edge.FromNodeId,
+            edge.ToNodeId,
+            new Position(projectedLatitude, projectedLongitude),
+            Distance(fromNode.Longitude, fromNode.Latitude, projectedLongitude, projectedLatitude),
+            Distance(toNode.Longitude, toNode.Latitude, projectedLongitude, projectedLatitude),
+            hasReverseEdge);
+    }
+
     public async Task<int> ApplyNearestEdgeSplitAsync(
         Position position,
         Func<int, Task> applyMutation,

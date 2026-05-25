@@ -23,11 +23,28 @@ internal sealed class DijkstraShortestPathStrategy(
         return ComputeShortestPath(sourceNodeId, targetNodeId, snapshot, ct);
     }
 
+    public Task<IReadOnlyList<int>> GetShortestPathAsync(
+        int sourceNodeId,
+        int targetNodeId,
+        GraphSnapshot snapshot,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(ComputeShortestPath(sourceNodeId, targetNodeId, snapshot, ct));
+    }
+
     public async Task<IReadOnlyDictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
         IReadOnlyCollection<int> waypointNodeIds,
         CancellationToken ct = default)
     {
         GraphSnapshot snapshot = await graphService.GetGraphSnapshotAsync(ct);
+        return await BuildDistanceMatrixAsync(waypointNodeIds, snapshot, ct);
+    }
+
+    public Task<IReadOnlyDictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
+        IReadOnlyCollection<int> waypointNodeIds,
+        GraphSnapshot snapshot,
+        CancellationToken ct = default)
+    {
         var waypoints = waypointNodeIds
             .Distinct()
             .OrderBy(nodeId => nodeId)
@@ -44,7 +61,7 @@ internal sealed class DijkstraShortestPathStrategy(
             }
         }
 
-        return matrix;
+        return Task.FromResult((IReadOnlyDictionary<(int From, int To), double>)matrix);
     }
 
     private static IReadOnlyDictionary<int, double> ComputeShortestDistances(

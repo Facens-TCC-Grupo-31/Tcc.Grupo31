@@ -165,6 +165,79 @@ public sealed class CollectionRoutingFlowTests
     }
 
     [Fact]
+    public async Task GenerateRouteAsync_UsesCustomStartAndEnd_WithDepotFallback()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Routing:DepotKey"] = "default",
+                ["Routing:DepotLatitude"] = "0",
+                ["Routing:DepotLongitude"] = "1",
+                ["Routing:FillThreshold"] = "0.8"
+            })
+            .Build();
+
+        services.AddLogging();
+        services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
+        services.AddSingleton<ISensorLatestValueCache, InMemorySensorLatestValueCache>();
+        services.AddServices(configuration);
+
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var nodeA = new GraphNode { Latitude = 0, Longitude = 0 };
+        var nodeB = new GraphNode { Latitude = 0, Longitude = 1 };
+        var nodeC = new GraphNode { Latitude = 0, Longitude = 2 };
+
+        db.GraphNodes.AddRange(nodeA, nodeB, nodeC);
+        await db.SaveChangesAsync();
+
+        db.GraphEdges.AddRange(
+            new GraphEdge { FromNodeId = nodeA.Id, ToNodeId = nodeB.Id, Distance = 1 },
+            new GraphEdge { FromNodeId = nodeB.Id, ToNodeId = nodeA.Id, Distance = 1 },
+            new GraphEdge { FromNodeId = nodeB.Id, ToNodeId = nodeC.Id, Distance = 1 },
+            new GraphEdge { FromNodeId = nodeC.Id, ToNodeId = nodeB.Id, Distance = 1 });
+        await db.SaveChangesAsync();
+
+        var sensor = new Sensor { IsActive = true, NodeId = nodeB.Id, CreatedAt = DateTime.UtcNow, ActivatedAt = DateTime.UtcNow };
+        db.Sensors.Add(sensor);
+        await db.SaveChangesAsync();
+
+        var cache = scope.ServiceProvider.GetRequiredService<ISensorLatestValueCache>();
+        await cache.SetAsync(sensor.Id, 0.95f, DateTime.UtcNow);
+
+        var routingService = scope.ServiceProvider.GetRequiredService<ICollectionRoutingService>();
+
+        // Ensure configured depot initialization does not affect persistence-boundary assertions below.
+        await routingService.GenerateRouteAsync();
+
+        int nodeCountBefore = await db.GraphNodes.CountAsync();
+        int edgeCountBefore = await db.GraphEdges.CountAsync();
+
+        var route = await routingService.GenerateRouteAsync(new CollectionRouteRequestOptionsDto
+        {
+            StartPosition = new Position(0, 0),
+            EndPosition = new Position(0, 2)
+        });
+
+        int nodeCountAfter = await db.GraphNodes.CountAsync();
+        int edgeCountAfter = await db.GraphEdges.CountAsync();
+
+        Assert.Equal(new Position(0, 1), route.DepotCoordinates);
+        Assert.Equal(new Position(0, 0), route.Stops[0].Position);
+        Assert.Equal(new Position(0, 2), route.Stops[^1].Position);
+        Assert.Equal(nodeCountBefore, nodeCountAfter);
+        Assert.Equal(edgeCountBefore, edgeCountAfter);
+    }
+
+    [Fact]
     public async Task GenerateRouteAsync_ReturnsSnappedDepotCoordinates()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

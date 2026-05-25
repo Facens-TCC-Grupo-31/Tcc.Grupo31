@@ -21,8 +21,9 @@ internal sealed class ThresholdNearestNeighborMetricTspPlanner(
         var matrixNodes = new List<int>(targetNodeIds.Count + 1) { request.DepotNodeId };
         matrixNodes.AddRange(targetNodeIds);
 
-        IReadOnlyDictionary<(int From, int To), double> matrix =
-            await shortestPathStrategy.BuildDistanceMatrixAsync(matrixNodes, ct);
+        IReadOnlyDictionary<(int From, int To), double> matrix = request.Snapshot is null
+            ? await shortestPathStrategy.BuildDistanceMatrixAsync(matrixNodes, ct)
+            : await shortestPathStrategy.BuildDistanceMatrixAsync(matrixNodes, request.Snapshot, ct);
 
         IReadOnlyList<int> nodeVisitOrder = routeOrderingStrategy.BuildRoute(
             request.DepotNodeId,

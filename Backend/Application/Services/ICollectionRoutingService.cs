@@ -4,5 +4,7 @@ namespace Application.Services;
 
 public interface ICollectionRoutingService
 {
-    Task<CollectionRouteResponseDto> GenerateRouteAsync(CancellationToken ct = default);
+    Task<CollectionRouteResponseDto> GenerateRouteAsync(
+        CollectionRouteRequestOptionsDto? options = null,
+        CancellationToken ct = default);
 }

@@ -1,5 +1,7 @@
 using Application.Common.Dtos;
 using Application.Services;
+using Domain.Entities;
+using Domain.ValueObjects;
 using Infrastructure.Database;
 using Infrastructure.Services.Configuration;
 using Microsoft.EntityFrameworkCore;
@@ -12,27 +14,74 @@ internal sealed class CollectionRoutingService(
     IDepotNodeService depotNodeService,
     IRoutePlanningStrategy routePlanningStrategy,
     IShortestPathStrategy shortestPathStrategy,
+    IGraphService graphService,
     AppDbContext db,
     IOptions<RoutingOptions> options) : ICollectionRoutingService
 {
     private readonly RoutingOptions _options = options.Value;
 
-    public async Task<CollectionRouteResponseDto> GenerateRouteAsync(CancellationToken ct = default)
+    public async Task<CollectionRouteResponseDto> GenerateRouteAsync(
+        CollectionRouteRequestOptionsDto? options = null,
+        CancellationToken ct = default)
     {
         var totalSw = Stopwatch.StartNew();
 
-        int depotNodeId = await depotNodeService.GetOrCreateDepotNodeIdAsync(ct);
+        int configuredDepotNodeId = await depotNodeService.GetOrCreateDepotNodeIdAsync(ct);
+        GraphSnapshot baseSnapshot = await graphService.GetGraphSnapshotAsync(ct);
+
+        var overlayBuilder = new EphemeralGraphOverlayBuilder(baseSnapshot);
+
+        GraphNode? configuredDepotNode = await db.GraphNodes.FindAsync(new object[] { configuredDepotNodeId }, cancellationToken: ct);
+        if (configuredDepotNode == null)
+            throw new InvalidOperationException($"Configured depot node {configuredDepotNodeId} not found");
+
+        var configuredDepotPosition = configuredDepotNode.Position;
+
+        var effectiveDepotPosition = options?.DepotPosition ?? configuredDepotPosition;
+        var effectiveStartPosition = options?.StartPosition ?? effectiveDepotPosition;
+        var effectiveEndPosition = options?.EndPosition ?? effectiveDepotPosition;
+
+        int depotNodeId = await ResolveEndpointNodeIdAsync(
+            effectiveDepotPosition,
+            configuredDepotPosition,
+            configuredDepotNodeId,
+            overlayBuilder,
+            ct);
+
+        int startNodeId = await ResolveEndpointNodeIdAsync(
+            effectiveStartPosition,
+            configuredDepotPosition,
+            configuredDepotNodeId,
+            overlayBuilder,
+            ct);
+
+        int endNodeId = await ResolveEndpointNodeIdAsync(
+            effectiveEndPosition,
+            configuredDepotPosition,
+            configuredDepotNodeId,
+            overlayBuilder,
+            ct);
+
+        GraphSnapshot routingSnapshot = overlayBuilder.BuildSnapshot();
+
         RoutePlanningResult planningResult = await routePlanningStrategy.PlanAsync(
-            new RoutePlanningRequest(depotNodeId, _options.FillThreshold),
+            new RoutePlanningRequest(startNodeId, _options.FillThreshold, routingSnapshot),
             ct);
 
         // Fetch depot node position
-        var depotNode = await db.GraphNodes.FindAsync(new object[] { depotNodeId }, cancellationToken: ct);
-        if (depotNode == null)
-            throw new InvalidOperationException($"Depot node {depotNodeId} not found");
+        Position depotPosition = overlayBuilder.TryGetVirtualPosition(depotNodeId, out Position? virtualDepot)
+            ? virtualDepot!
+            : configuredDepotNodeId == depotNodeId
+                ? configuredDepotPosition
+                : throw new InvalidOperationException($"Depot node {depotNodeId} not found");
 
-        var orderedNodeIds = planningResult.NodeVisitOrder;
-        var expandedNodeIds = await ExpandRouteNodeIdsAsync(orderedNodeIds, ct);
+        var orderedNodeIds = planningResult.NodeVisitOrder.ToList();
+        if (orderedNodeIds.Count > 0)
+        {
+            orderedNodeIds[^1] = endNodeId;
+        }
+
+        var expandedNodeIds = await ExpandRouteNodeIdsAsync(orderedNodeIds, routingSnapshot, ct);
 
         var selectedSensorNodeIds = planningResult.SelectedSensors
             .Select(sensor => sensor.NodeId)
@@ -42,6 +91,7 @@ internal sealed class CollectionRoutingService(
         var nodeIdsToLoad = expandedNodeIds
             .Concat(orderedNodeIds)
             .Concat(selectedSensorNodeIds)
+            .Where(nodeId => nodeId > 0)
             .Distinct()
             .ToList();
 
@@ -50,6 +100,11 @@ internal sealed class CollectionRoutingService(
             .ToListAsync(ct);
 
         var nodePositionMap = orderedNodes.ToDictionary(n => n.Id, n => n.Position);
+        foreach ((int nodeId, Position position) in overlayBuilder.GetVirtualPositions())
+        {
+            nodePositionMap[nodeId] = position;
+        }
+
         var orderedNodeCoordinates = expandedNodeIds
             .Select(nodeId => nodePositionMap[nodeId])
             .ToList();
@@ -76,21 +131,75 @@ internal sealed class CollectionRoutingService(
             })
             .ToList();
 
+        double totalDistance = await ComputeTotalDistanceAsync(orderedNodeIds, routingSnapshot, ct);
+
         totalSw.Stop();
 
         return new CollectionRouteResponseDto
         {
-            DepotCoordinates = depotNode.Position,
+            DepotCoordinates = depotPosition,
             OrderedNodeCoordinates = orderedNodeCoordinates,
             Stops = stops,
             SelectedSensors = selectedSensors,
-            TotalDistance = planningResult.TotalDistance,
+            TotalDistance = totalDistance,
             RouteGenerationMs = totalSw.Elapsed.TotalMilliseconds
         };
     }
 
+    private async Task<int> ResolveEndpointNodeIdAsync(
+        Position endpointPosition,
+        Position configuredDepotPosition,
+        int configuredDepotNodeId,
+        EphemeralGraphOverlayBuilder overlayBuilder,
+        CancellationToken ct)
+    {
+        if (PositionsEqual(endpointPosition, configuredDepotPosition))
+        {
+            return configuredDepotNodeId;
+        }
+
+        if (overlayBuilder.TryGetNodeIdByPosition(endpointPosition, out int existingNodeId))
+        {
+            return existingNodeId;
+        }
+
+        GraphEdgeProjection projection = await graphService.ProjectOntoNearestEdgeAsync(endpointPosition, ct);
+        return overlayBuilder.AddProjectedNode(projection);
+    }
+
+    private async Task<double> ComputeTotalDistanceAsync(
+        IReadOnlyList<int> orderedNodeIds,
+        GraphSnapshot snapshot,
+        CancellationToken ct)
+    {
+        if (orderedNodeIds.Count <= 1)
+        {
+            return 0;
+        }
+
+        IReadOnlyDictionary<(int From, int To), double> matrix =
+            await shortestPathStrategy.BuildDistanceMatrixAsync(orderedNodeIds.Distinct().ToList(), snapshot, ct);
+
+        double totalDistance = 0;
+        for (int i = 0; i < orderedNodeIds.Count - 1; i++)
+        {
+            int from = orderedNodeIds[i];
+            int to = orderedNodeIds[i + 1];
+
+            if (!matrix.TryGetValue((from, to), out double distance))
+            {
+                throw new InvalidOperationException($"Missing shortest path distance from node {from} to node {to}.");
+            }
+
+            totalDistance += distance;
+        }
+
+        return totalDistance;
+    }
+
     private async Task<IReadOnlyList<int>> ExpandRouteNodeIdsAsync(
         IReadOnlyList<int> nodeVisitOrder,
+        GraphSnapshot snapshot,
         CancellationToken ct)
     {
         if (nodeVisitOrder.Count == 0)
@@ -105,7 +214,7 @@ internal sealed class CollectionRoutingService(
             int from = nodeVisitOrder[i];
             int to = nodeVisitOrder[i + 1];
 
-            IReadOnlyList<int> legPath = await shortestPathStrategy.GetShortestPathAsync(from, to, ct);
+            IReadOnlyList<int> legPath = await shortestPathStrategy.GetShortestPathAsync(from, to, snapshot, ct);
             if (legPath.Count == 0)
             {
                 throw new InvalidOperationException($"Missing shortest path from node {from} to node {to}.");
@@ -143,5 +252,98 @@ internal sealed class CollectionRoutingService(
         }
 
         return deduplicated;
+    }
+
+    private static bool PositionsEqual(Position a, Position b)
+    {
+        return a.Latitude == b.Latitude && a.Longitude == b.Longitude;
+    }
+
+    private sealed class EphemeralGraphOverlayBuilder
+    {
+        private readonly HashSet<int> _nodeIds;
+        private readonly Dictionary<int, List<GraphNeighbor>> _adjacency;
+        private readonly Dictionary<int, Position> _virtualNodePositions = [];
+        private readonly Dictionary<string, int> _nodeByPositionKey = [];
+        private int _nextVirtualNodeId = -1;
+        private int _nextVirtualEdgeId = -1;
+
+        public EphemeralGraphOverlayBuilder(GraphSnapshot baseSnapshot)
+        {
+            _nodeIds = [.. baseSnapshot.NodeIds];
+            _adjacency = baseSnapshot.AdjacencyByNode.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.ToList());
+        }
+
+        public bool TryGetNodeIdByPosition(Position position, out int nodeId)
+            => _nodeByPositionKey.TryGetValue(BuildPositionKey(position), out nodeId);
+
+        public bool TryGetVirtualPosition(int nodeId, out Position? position)
+        {
+            if (_virtualNodePositions.TryGetValue(nodeId, out Position? found))
+            {
+                position = found;
+                return true;
+            }
+
+            position = null;
+            return false;
+        }
+
+        public IReadOnlyDictionary<int, Position> GetVirtualPositions() => _virtualNodePositions;
+
+        public int AddProjectedNode(GraphEdgeProjection projection)
+        {
+            int nodeId = _nextVirtualNodeId--;
+            _nodeIds.Add(nodeId);
+            _virtualNodePositions[nodeId] = projection.ProjectedPosition;
+            _nodeByPositionKey[BuildPositionKey(projection.ProjectedPosition)] = nodeId;
+
+            EnsureNode(projection.FromNodeId);
+            EnsureNode(projection.ToNodeId);
+            EnsureNode(nodeId);
+
+            AddDirectedEdge(projection.FromNodeId, nodeId, projection.DistanceToFromNode);
+            AddDirectedEdge(nodeId, projection.ToNodeId, projection.DistanceToToNode);
+
+            if (projection.HasReverseEdge)
+            {
+                AddDirectedEdge(projection.ToNodeId, nodeId, projection.DistanceToToNode);
+                AddDirectedEdge(nodeId, projection.FromNodeId, projection.DistanceToFromNode);
+            }
+
+            return nodeId;
+        }
+
+        public GraphSnapshot BuildSnapshot()
+        {
+            var finalizedAdjacency = _adjacency.ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyList<GraphNeighbor>)kvp.Value
+                    .OrderBy(neighbor => neighbor.ToNodeId)
+                    .ThenBy(neighbor => neighbor.EdgeId)
+                    .ToList());
+
+            return new GraphSnapshot(_nodeIds.OrderBy(id => id).ToList(), finalizedAdjacency);
+        }
+
+        private void EnsureNode(int nodeId)
+        {
+            if (!_adjacency.ContainsKey(nodeId))
+            {
+                _adjacency[nodeId] = [];
+            }
+        }
+
+        private void AddDirectedEdge(int fromNodeId, int toNodeId, double distance)
+        {
+            _adjacency[fromNodeId].Add(new GraphNeighbor(toNodeId, _nextVirtualEdgeId--, distance));
+        }
+
+        private static string BuildPositionKey(Position position)
+        {
+            return $"{position.Latitude:R}|{position.Longitude:R}";
+        }
     }
 }

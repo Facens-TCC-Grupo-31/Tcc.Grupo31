@@ -4,6 +4,7 @@ using Application.Services;
 using Domain.Entities;
 using Domain.ValueObjects;
 using Infrastructure.Database;
+using Infrastructure.Mqtt.Configuration;
 using Infrastructure.Services.DependencyInjection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,10 @@ public sealed class SensorRegistrationFlowTests
                 ["Routing:DepotKey"] = "test",
                 ["Routing:DepotLatitude"] = "-23.47",
                 ["Routing:DepotLongitude"] = "-47.43",
-                ["Routing:FillThreshold"] = "0.8"
+                ["Routing:FillThreshold"] = "0.8",
+                ["Mqtt:Broker"] = "mosquitto",
+                ["Mqtt:ExternalBrokerHost"] = "localhost",
+                ["Mqtt:Port"] = "1883"
             })
             .Build();
 
@@ -34,6 +38,9 @@ public sealed class SensorRegistrationFlowTests
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
         services.AddSingleton<IProvisioningDataCache, InMemoryProvisioningDataCache>();
         services.AddServices(configuration);
+        services
+            .AddOptions<MqttOptions>()
+            .Configure(options => configuration.GetSection(MqttOptions.SectionName).Bind(options));
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -159,7 +166,10 @@ public sealed class SensorRegistrationFlowTests
                 ["Routing:DepotKey"] = "test",
                 ["Routing:DepotLatitude"] = "-23.47",
                 ["Routing:DepotLongitude"] = "-47.43",
-                ["Routing:FillThreshold"] = "0.8"
+                ["Routing:FillThreshold"] = "0.8",
+                ["Mqtt:Broker"] = "mosquitto",
+                ["Mqtt:ExternalBrokerHost"] = "localhost",
+                ["Mqtt:Port"] = "1883"
             })
             .Build();
 
@@ -167,6 +177,9 @@ public sealed class SensorRegistrationFlowTests
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
         services.AddSingleton<IProvisioningDataCache, InMemoryProvisioningDataCache>();
         services.AddServices(configuration);
+        services
+            .AddOptions<MqttOptions>()
+            .Configure(options => configuration.GetSection(MqttOptions.SectionName).Bind(options));
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -215,7 +228,10 @@ public sealed class SensorRegistrationFlowTests
                 ["Routing:DepotKey"] = "test",
                 ["Routing:DepotLatitude"] = "-23.47",
                 ["Routing:DepotLongitude"] = "-47.43",
-                ["Routing:FillThreshold"] = "0.8"
+                ["Routing:FillThreshold"] = "0.8",
+                ["Mqtt:Broker"] = "mosquitto",
+                ["Mqtt:ExternalBrokerHost"] = "localhost",
+                ["Mqtt:Port"] = "1883"
             })
             .Build();
 
@@ -223,6 +239,9 @@ public sealed class SensorRegistrationFlowTests
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
         services.AddSingleton<IProvisioningDataCache, InMemoryProvisioningDataCache>();
         services.AddServices(configuration);
+        services
+            .AddOptions<MqttOptions>()
+            .Configure(options => configuration.GetSection(MqttOptions.SectionName).Bind(options));
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();

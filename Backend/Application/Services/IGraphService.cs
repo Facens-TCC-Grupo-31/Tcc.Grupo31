@@ -10,6 +10,10 @@ public interface IGraphService
 
     Task<GraphSnapshot> GetGraphSnapshotAsync(CancellationToken ct = default);
 
+    Task<GraphEdgeProjection> ProjectOntoNearestEdgeAsync(
+        Position position,
+        CancellationToken ct = default);
+
     Task<int> ApplyNearestEdgeSplitAsync(
         Position position,
         Func<int, Task> applyMutation,
@@ -24,3 +28,11 @@ public sealed record GraphNeighbor(int ToNodeId, int EdgeId, double Distance);
 public sealed record GraphSnapshot(
     IReadOnlyCollection<int> NodeIds,
     IReadOnlyDictionary<int, IReadOnlyList<GraphNeighbor>> AdjacencyByNode);
+
+public sealed record GraphEdgeProjection(
+    int FromNodeId,
+    int ToNodeId,
+    Position ProjectedPosition,
+    double DistanceToFromNode,
+    double DistanceToToNode,
+    bool HasReverseEdge);

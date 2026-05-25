@@ -2,7 +2,8 @@ namespace Application.Services;
 
 public sealed record RoutePlanningRequest(
     int DepotNodeId,
-    float FillThreshold);
+    float FillThreshold,
+    GraphSnapshot? Snapshot = null);
 
 public sealed record RoutePlanningResult(
     IReadOnlyList<int> NodeVisitOrder,
