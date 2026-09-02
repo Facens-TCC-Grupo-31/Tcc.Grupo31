@@ -1,4 +1,5 @@
-﻿using Application.Services;
+﻿using Application.Common.Utils;
+using Application.Services;
 using Infrastructure.Services.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,7 +29,8 @@ public static class DependencyInjection
                 "SensorLiveness:HeartbeatTtl must be greater than 00:00:00")
             .ValidateOnStart();
 
-        services.AddScoped<IGraphService, GraphService>()
+        services.AddSingleton<ICoordinateDistanceCalculator, LocalApproximateDistanceCalculator>()
+            .AddScoped<IGraphService, GraphService>()
             .AddScoped<IReadingService, ReadingService>()
             .AddScoped<ISensorQueryService, SensorQueryService>()
             .AddScoped<ISensorLifecycleService, SensorLifecycleService>()

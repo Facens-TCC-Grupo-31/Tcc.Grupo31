@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Application.Common.Utils;
 using Domain.Entities;
 using Infrastructure.Database;
 
@@ -68,7 +69,7 @@ public static class OsmGraphImporter
                 if (!edgeSet.Add(key))
                     continue;
 
-                double distance = CalculateDistance(from, to);
+                double distance = new LocalApproximateDistanceCalculator().Calculate(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
 
                 edges.Add(new GraphEdge { FromNodeId = from.Id, ToNodeId = to.Id, Distance = distance });
                 edges.Add(new GraphEdge { FromNodeId = to.Id, ToNodeId = from.Id, Distance = distance });
@@ -78,12 +79,5 @@ public static class OsmGraphImporter
         Console.WriteLine($"Persisting {edges.Count} graph edges ({edges.Count / 2} unique pairs)...");
         db.GraphEdges.AddRange(edges);
         await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static double CalculateDistance(GraphNode a, GraphNode b)
-    {
-        double deltaLongitude = b.Longitude - a.Longitude;
-        double deltaLatitude = b.Latitude - a.Latitude;
-        return Math.Sqrt(deltaLongitude * deltaLongitude + deltaLatitude * deltaLatitude);
     }
 }

@@ -1,3 +1,4 @@
+using Application.Common.Utils;
 using Application.Services;
 using Domain.Entities;
 using Domain.ValueObjects;
@@ -9,8 +10,11 @@ namespace Infrastructure.Services;
 
 internal sealed class GraphService(
     AppDbContext db,
-    ILogger<GraphService> logger) : IGraphService
+    ILogger<GraphService> logger,
+    ICoordinateDistanceCalculator coordinateDistanceCalculator) : IGraphService
 {
+    private readonly ICoordinateDistanceCalculator _coordinateDistanceCalculator = coordinateDistanceCalculator;
+
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(2);
     private static readonly SemaphoreSlim WriteLock = new(1, 1);
     private static readonly Lock CacheLock = new();
@@ -81,8 +85,8 @@ internal sealed class GraphService(
             edge.FromNodeId,
             edge.ToNodeId,
             new Position(projectedLatitude, projectedLongitude),
-            Distance(fromNode.Longitude, fromNode.Latitude, projectedLongitude, projectedLatitude),
-            Distance(toNode.Longitude, toNode.Latitude, projectedLongitude, projectedLatitude),
+            _coordinateDistanceCalculator.Calculate(fromNode.Latitude, fromNode.Longitude, projectedLatitude, projectedLongitude),
+            _coordinateDistanceCalculator.Calculate(toNode.Latitude, toNode.Longitude, projectedLatitude, projectedLongitude),
             hasReverseEdge);
     }
 
@@ -106,7 +110,7 @@ internal sealed class GraphService(
         var (edge, projectedLongitude, projectedLatitude) = FindNearestEdge(position.Longitude, position.Latitude);
         GraphNode nearestFrom = Nodes[edge.FromNodeId];
         GraphNode nearestTo = Nodes[edge.ToNodeId];
-        double projectionDistance = Distance(position.Longitude, position.Latitude, projectedLongitude, projectedLatitude);
+        double projectionDistance = _coordinateDistanceCalculator.Calculate(position.Latitude, position.Longitude, projectedLatitude, projectedLongitude);
 
         logger.LogInformation(
             "Graph split input lat={Latitude}, lon={Longitude}; nearest edge {EdgeId} from (lat={FromLat}, lon={FromLon}) to (lat={ToLat}, lon={ToLon}); projected to (lat={ProjectedLat}, lon={ProjectedLon}) with distance {ProjectionDistance}",
@@ -144,13 +148,13 @@ internal sealed class GraphService(
         {
             FromNodeId = fromNode.Id,
             ToNodeId = newNode.Id,
-            Distance = Distance(fromNode.Longitude, fromNode.Latitude, newNode.Longitude, newNode.Latitude)
+            Distance = _coordinateDistanceCalculator.Calculate(fromNode.Latitude, fromNode.Longitude, newNode.Latitude, newNode.Longitude)
         };
         var edge2 = new GraphEdge
         {
             FromNodeId = newNode.Id,
             ToNodeId = toNode.Id,
-            Distance = Distance(newNode.Longitude, newNode.Latitude, toNode.Longitude, toNode.Latitude)
+            Distance = _coordinateDistanceCalculator.Calculate(newNode.Latitude, newNode.Longitude, toNode.Latitude, toNode.Longitude)
         };
 
         var newEdges = new List<GraphEdge> { edge1, edge2 };
@@ -162,14 +166,14 @@ internal sealed class GraphService(
             {
                 FromNodeId = toNode.Id,
                 ToNodeId = newNode.Id,
-                Distance = Distance(toNode.Longitude, toNode.Latitude, newNode.Longitude, newNode.Latitude)
+                Distance = _coordinateDistanceCalculator.Calculate(toNode.Latitude, toNode.Longitude, newNode.Latitude, newNode.Longitude)
             };
 
             var edge4 = new GraphEdge
             {
                 FromNodeId = newNode.Id,
                 ToNodeId = fromNode.Id,
-                Distance = Distance(newNode.Longitude, newNode.Latitude, fromNode.Longitude, fromNode.Latitude)
+                Distance = _coordinateDistanceCalculator.Calculate(newNode.Latitude, newNode.Longitude, fromNode.Latitude, fromNode.Longitude)
             };
 
             newEdges.Add(edge3);
@@ -307,7 +311,7 @@ internal sealed class GraphService(
         return node.Id;
     }
 
-    private static (GraphEdge edge, double projectedLongitude, double projectedLatitude) FindNearestEdge(double longitude, double latitude)
+    private (GraphEdge edge, double projectedLongitude, double projectedLatitude) FindNearestEdge(double longitude, double latitude)
     {
         GraphEdge? nearest = null;
         double nearestDistanceSquared = double.MaxValue;
@@ -327,7 +331,7 @@ internal sealed class GraphService(
                 toNode.Longitude,
                 toNode.Latitude);
 
-            double distanceSquared = DistanceSquared(longitude, latitude, projectedLongitude, projectedLatitude);
+            double distanceSquared = _coordinateDistanceCalculator.CalculateSquared(latitude, longitude, projectedLatitude, projectedLongitude);
             if (distanceSquared < nearestDistanceSquared)
             {
                 nearestDistanceSquared = distanceSquared;
@@ -363,16 +367,6 @@ internal sealed class GraphService(
         t = Math.Clamp(t, 0, 1);
         return (fromLongitude + t * deltaLongitude, fromLatitude + t * deltaLatitude);
     }
-
-    private static double DistanceSquared(double longitude1, double latitude1, double longitude2, double latitude2)
-    {
-        double deltaLongitude = longitude1 - longitude2;
-        double deltaLatitude = latitude1 - latitude2;
-        return deltaLongitude * deltaLongitude + deltaLatitude * deltaLatitude;
-    }
-
-    private static double Distance(double longitude1, double latitude1, double longitude2, double latitude2)
-        => Math.Sqrt(DistanceSquared(longitude1, latitude1, longitude2, latitude2));
 
     private static void AddEdgeToAdjacency(GraphEdge edge)
     {
