@@ -12,8 +12,7 @@ public interface IReadingService
     );
 
     Task<bool> RegisterMockReadingAsync(
-        long sensorId,
-        int distanceMm,
+        SensorSampleMessageDto reading,
         CancellationToken ct = default
     );
 

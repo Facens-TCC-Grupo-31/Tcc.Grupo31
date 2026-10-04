@@ -49,11 +49,8 @@ internal class SensorMockSampleReceivedHandler(
             return;
         }
 
-        bool ok = await readingService.RegisterMockReadingAsync(
-            dto.SensorId,
-            dto.DistanceMm,
-            cancellationToken
-        );
+        bool ok = await readingService.RegisterMockReadingAsync(dto, cancellationToken);
+
         if (!ok)
         {
             logger.LogWarning(

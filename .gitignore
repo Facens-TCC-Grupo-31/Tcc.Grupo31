@@ -3,3 +3,8 @@
 bin
 Debug
 obj
+*.code-workspace
+
+Backend/Simulation/Simulation-Implementation-Plan.md
+
+Backend/Simulation/Logs

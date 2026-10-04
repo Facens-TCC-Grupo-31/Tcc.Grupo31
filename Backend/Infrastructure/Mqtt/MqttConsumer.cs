@@ -4,6 +4,7 @@ using Infrastructure.Mqtt.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MQTTnet;
+using System.Threading.Channels;
 
 namespace Infrastructure.Mqtt;
 
@@ -12,8 +13,19 @@ public sealed class MqttConsumer(
     IOptions<MqttOptions> mqttOptions,
     ILogger<MqttConsumer> logger) : IMqttConsumer
 {
+    private readonly Channel<(string Topic, string Payload)> _channel = Channel.CreateBounded<(string, string)>(new BoundedChannelOptions(10_000)
+    {
+        SingleWriter = true,
+        FullMode = BoundedChannelFullMode.Wait
+    });
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        int maxConcurrency = Environment.ProcessorCount * 2;
+        Task[] workers = Enumerable.Range(0, maxConcurrency)
+            .Select(_ => ProcessQueueAsync(cancellationToken))
+            .ToArray();
+
         MqttOptions options = mqttOptions.Value;
 
         if (string.IsNullOrWhiteSpace(options.Broker))
@@ -42,32 +54,28 @@ public sealed class MqttConsumer(
                     "Failed to connect to MQTT broker at {Broker}:{Port} ({ResultCode})",
                     options.Broker,
                     options.Port,
-                    connectResult.ResultCode);
+                    connectResult.ResultCode
+                );
+
                 return;
             }
 
             logger.LogInformation(
                 "Connected to MQTT broker at {Broker}:{Port}",
                 options.Broker,
-                options.Port);
+                options.Port
+            );
 
-            await mqttClient.SubscribeAsync(
-                new MqttTopicFilterBuilder().WithTopic(MqttTopics.Register).Build(),
-                cancellationToken);
-
-            await mqttClient.SubscribeAsync(
-                new MqttTopicFilterBuilder().WithTopic(MqttTopics.Samples).Build(),
-                cancellationToken);
-
-            await mqttClient.SubscribeAsync(
-                new MqttTopicFilterBuilder().WithTopic(MqttTopics.MockSamples).Build(),
-                cancellationToken);
+            await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic(MqttTopics.Register).Build(), cancellationToken);
+            await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic(MqttTopics.Samples).Build(), cancellationToken);
+            await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic(MqttTopics.MockSamples).Build(), cancellationToken);
 
             logger.LogInformation(
                 "Subscribed to topics {RegisterTopic}, {SamplesTopic}, and {MockSamplesTopic}",
                 MqttTopics.Register,
                 MqttTopics.Samples,
-                MqttTopics.MockSamples);
+                MqttTopics.MockSamples
+            );
 
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }
@@ -89,20 +97,24 @@ public sealed class MqttConsumer(
 
     private async Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
     {
-        string topic = args.ApplicationMessage.Topic;
-        string payload = args.ApplicationMessage.Payload.IsEmpty
-            ? string.Empty
-            : args.ApplicationMessage.ConvertPayloadToString();
+        _channel.Writer.TryWrite((
+            args.ApplicationMessage.Topic,
+            args.ApplicationMessage.ConvertPayloadToString())
+        );
+    }
 
-        logger.LogInformation("Received message on topic {Topic}", topic);
-
-        try
+    private async Task ProcessQueueAsync(CancellationToken ct)
+    {
+        await foreach (var (topic, payload) in _channel.Reader.ReadAllAsync(ct))
         {
-            await messageDispatcher.DispatchAsync(topic, payload, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Unhandled error processing message on topic {Topic}", topic);
+            try
+            {
+                await messageDispatcher.DispatchAsync(topic, payload, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing message on topic {Topic}", topic);
+            }
         }
     }
 }

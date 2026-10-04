@@ -8,11 +8,16 @@ namespace Infrastructure.Cache;
 internal sealed class RedisSensorLatestValueCache(IConnectionMultiplexer redis) : ISensorLatestValueCache
 {
     private const string HashKey = "sensor:latest";
-    private IDatabase Db
-        => redis.GetDatabase();
+
+    private IDatabase Db => redis.GetDatabase();
 
     public Task SetAsync(long sensorId, float fillLevel, DateTime timestamp, CancellationToken ct = default)
     {
+        if (GetAsync(sensorId, ct).Result?.Timestamp >= timestamp)
+        {
+            return Task.CompletedTask;
+        }
+
         var payload = JsonSerializer.Serialize(new { fillLevel, timestamp = timestamp.ToString("O") });
         return Db.HashSetAsync(HashKey, sensorId.ToString(CultureInfo.InvariantCulture), payload);
     }
