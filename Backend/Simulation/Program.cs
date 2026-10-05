@@ -4,8 +4,6 @@ using System.Diagnostics;
 
 SimulationCommandLineOptions commandLine = SimulationCommandLineOptions.Parse(args);
 
-var executor = new AnalyticalScenarioExecutor();
-
 var scenarioDefinition = commandLine.Scenario switch
 {
     SimulationScenarioKind.Baseline => ScenarioDefinitions.Baseline,
@@ -13,25 +11,32 @@ var scenarioDefinition = commandLine.Scenario switch
     _ => throw new UnreachableException()
 };
 
-var simulationResult = await executor.ExecuteAsync(
-    scenarioDefinition,
-    commandLine.Scenario.ToString(),
-    DateTime.UtcNow
-);
+Console.WriteLine(scenarioDefinition.Graph.OsmPath);
+
+var environmentFactory = new SqliteSimulationEnvironmentFactory();
+var orchestrator = new SimulationOrchestrator();
+var startTimeUtc = DateTime.UtcNow;
+
+SimulationRunResult simulationResult;
+await using (var environment = await environmentFactory.CreateAsync(scenarioDefinition))
+{
+    simulationResult = await orchestrator.RunAsync(
+        scenarioDefinition,
+        environment.RouteProvider,
+        startTimeUtc,
+        environment.ReadingSink
+    );
+}
 
 Console.WriteLine(SimulationOutput.FormatSummary(simulationResult));
 
-var simulationReportWriter = new SimulationReportWriter();
-
-await simulationReportWriter.WriteAsync(simulationResult, commandLine.Scenario.ToString())
+await new SimulationReportWriter()
+    .WriteAsync(simulationResult, commandLine.Scenario.ToString())
     .ContinueWith(task =>
-    {
-        if (task.IsCompletedSuccessfully)
         {
-            Console.WriteLine($"Report file written to: {task.Result}");
+            if (task.IsCompletedSuccessfully)
+                Console.WriteLine($"Report file written to: {task.Result}");
+            else
+                Console.WriteLine($"Failed to write report file: {task.Exception?.GetBaseException().Message}");
         }
-        else
-        {
-            Console.WriteLine($"Failed to write report file: {task.Exception?.GetBaseException().Message}");
-        }
-    });
+    );

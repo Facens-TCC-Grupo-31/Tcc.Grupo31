@@ -1,7 +1,6 @@
 using Application.Cache;
 using Application.Common.Dtos;
 using Application.Services;
-using Domain.ValueObjects;
 using Infrastructure.Database;
 using Infrastructure.Mqtt.Configuration;
 using Infrastructure.Services.DependencyInjection;
@@ -9,7 +8,6 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Simulation;
 
