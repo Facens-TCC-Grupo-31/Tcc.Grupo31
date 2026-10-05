@@ -3,67 +3,70 @@ using Application.Services;
 namespace Infrastructure.Services;
 
 internal sealed class ThresholdNearestNeighborMetricTspPlanner(
-    IPointSelectionStrategy pointSelectionStrategy,
-    IShortestPathStrategy shortestPathStrategy,
-    IRouteOrderingStrategy routeOrderingStrategy) : IRoutePlanningStrategy
+    ThresholdPointSelectionStrategy thresholdPointSelectionStrategy,
+    DijkstraShortestPathStrategy dijkstraShortestPathStrategy,
+    NearestNeighborMetricTspOrderingStrategy nearestNeighborMetricTspOrderingStrategy) : IRoutePlanningStrategy
 {
-    public async Task<RoutePlanningResult> PlanAsync(RoutePlanningRequest request, CancellationToken ct = default)
+    public async Task<RoutePlanningResult> PlanAsync(
+        int startNodeId,
+        int endNodeId,
+        GraphSnapshot? snapshot,
+        CancellationToken ct = default)
     {
-        IReadOnlyList<SelectedCollectionPoint> selectedPoints =
-            await pointSelectionStrategy.SelectPointsAsync(request.FillThreshold, ct);
+        var routePoints = await thresholdPointSelectionStrategy.SelectPointsAsync(ct);
 
-        IReadOnlyList<int> targetNodeIds = selectedPoints
+        var targetNodeIds = routePoints
             .Select(point => point.NodeId)
             .Distinct()
-            .OrderBy(id => id)
             .ToList();
 
-        var matrixNodes = new List<int>(targetNodeIds.Count + 1) { request.DepotNodeId };
-        matrixNodes.AddRange(targetNodeIds);
+        List<int> matrixNodeIds = [startNodeId, .. targetNodeIds, endNodeId];
+        var distanceMatrix = await BuildDistanceMatrixAsync(matrixNodeIds, snapshot, ct);
 
-        IReadOnlyDictionary<(int From, int To), double> matrix = request.Snapshot is null
-            ? await shortestPathStrategy.BuildDistanceMatrixAsync(matrixNodes, ct)
-            : await shortestPathStrategy.BuildDistanceMatrixAsync(matrixNodes, request.Snapshot, ct);
-
-        IReadOnlyList<int> nodeVisitOrder = routeOrderingStrategy.BuildRoute(
-            request.DepotNodeId,
+        var nodeIdsInVisitationOrder = nearestNeighborMetricTspOrderingStrategy.BuildRoute(
+            startNodeId,
+            endNodeId,
             targetNodeIds,
-            (from, to) => matrix.TryGetValue((from, to), out double value) ? value : null);
+            (from, to) => distanceMatrix.GetValueOrDefault((from, to))
+        );
 
-        var nodeToSensors = selectedPoints
-            .GroupBy(x => x.NodeId)
-            .ToDictionary(
-                g => g.Key,
-                g => (IReadOnlyList<long>)g.Select(x => x.SensorId).OrderBy(id => id).ToList());
+        var sensorsByNode = routePoints
+            .OrderBy(p => p.SensorId)
+            .ToLookup(p => p.NodeId);
 
-        var sensorVisitOrder = new List<long>(selectedPoints.Count);
-        foreach (int nodeId in nodeVisitOrder)
-        {
-            if (nodeId == request.DepotNodeId)
-            {
-                continue;
-            }
-
-            if (!nodeToSensors.TryGetValue(nodeId, out IReadOnlyList<long>? sensors) || sensors.Count == 0)
-            {
-                continue;
-            }
-
-            sensorVisitOrder.AddRange(sensors);
-        }
-
-        var selectedSensorById = selectedPoints.ToDictionary(x => x.SensorId);
-        var orderedSelectedSensors = sensorVisitOrder
-            .Where(sensorId => selectedSensorById.ContainsKey(sensorId))
-            .Select(sensorId => selectedSensorById[sensorId])
+        var orderedSelectedSensors = nodeIdsInVisitationOrder
+            .Where(nodeId => nodeId != startNodeId && nodeId != endNodeId)
+            .SelectMany(nodeId => sensorsByNode[nodeId])
             .ToList();
 
-        double totalDistance = 0;
-        for (int i = 0; i < nodeVisitOrder.Count - 1; i++)
+        double totalDistance = CalculateTotalDistance(distanceMatrix, nodeIdsInVisitationOrder);
+
+        return new RoutePlanningResult(
+            nodeIdsInVisitationOrder,
+            orderedSelectedSensors,
+            totalDistance
+        );
+    }
+
+    private async Task<Dictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
+        List<int> nodeIds,
+        GraphSnapshot? graphSnapshot,
+        CancellationToken ct = default)
+        => graphSnapshot is null
+        ? await dijkstraShortestPathStrategy.BuildDistanceMatrixAsync(nodeIds, ct)
+        : await dijkstraShortestPathStrategy.BuildDistanceMatrixAsync(nodeIds, graphSnapshot, ct);
+
+    private static double CalculateTotalDistance(
+        Dictionary<(int From, int To), double> matrix,
+        List<int> routePointsInVisitationOrder)
+    {
+        var totalDistance = 0.0;
+        for (int i = 0; i < routePointsInVisitationOrder.Count - 1; i++)
         {
-            int from = nodeVisitOrder[i];
-            int to = nodeVisitOrder[i + 1];
-            if (!matrix.TryGetValue((from, to), out double distance))
+            var from = routePointsInVisitationOrder[i];
+            var to = routePointsInVisitationOrder[i + 1];
+
+            if (!matrix.TryGetValue((from, to), out var distance))
             {
                 throw new InvalidOperationException($"Missing shortest path distance from node {from} to node {to}.");
             }
@@ -71,9 +74,6 @@ internal sealed class ThresholdNearestNeighborMetricTspPlanner(
             totalDistance += distance;
         }
 
-        return new RoutePlanningResult(
-            nodeVisitOrder,
-            orderedSelectedSensors,
-            totalDistance);
+        return totalDistance;
     }
 }

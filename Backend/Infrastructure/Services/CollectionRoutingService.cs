@@ -3,9 +3,7 @@ using Application.Services;
 using Domain.Entities;
 using Domain.ValueObjects;
 using Infrastructure.Database;
-using Infrastructure.Services.Configuration;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using System.Diagnostics;
 
 namespace Infrastructure.Services;
@@ -15,11 +13,8 @@ internal sealed class CollectionRoutingService(
     IRoutePlanningStrategy routePlanningStrategy,
     IShortestPathStrategy shortestPathStrategy,
     IGraphService graphService,
-    AppDbContext db,
-    IOptions<RoutingOptions> options) : ICollectionRoutingService
+    AppDbContext db) : ICollectionRoutingService
 {
-    private readonly RoutingOptions _options = options.Value;
-
     public async Task<CollectionRouteResponseDto> GenerateRouteAsync(
         CollectionRouteRequestOptionsDto? options = null,
         CancellationToken ct = default)
@@ -31,57 +26,38 @@ internal sealed class CollectionRoutingService(
 
         var overlayBuilder = new EphemeralGraphOverlayBuilder(baseSnapshot);
 
-        GraphNode? configuredDepotNode = await db.GraphNodes.FindAsync(new object[] { configuredDepotNodeId }, cancellationToken: ct);
-        if (configuredDepotNode == null)
-            throw new InvalidOperationException($"Configured depot node {configuredDepotNodeId} not found");
+        GraphNode? configuredDepotNode = await db.GraphNodes.FindAsync([configuredDepotNodeId], cancellationToken: ct)
+            ?? throw new InvalidOperationException($"Configured depot node {configuredDepotNodeId} not found");
 
         var configuredDepotPosition = configuredDepotNode.Position;
 
-        var effectiveDepotPosition = options?.DepotPosition ?? configuredDepotPosition;
-        var effectiveStartPosition = options?.StartPosition ?? effectiveDepotPosition;
-        var effectiveEndPosition = options?.EndPosition ?? effectiveDepotPosition;
+        (int depotNodeId, int startNodeId, int endNodeId) = await ResolveRouteEndpointNodeIds(options, configuredDepotNodeId, overlayBuilder, configuredDepotPosition, ct);
 
-        int depotNodeId = await ResolveEndpointNodeIdAsync(
-            effectiveDepotPosition,
-            configuredDepotPosition,
-            configuredDepotNodeId,
-            overlayBuilder,
-            ct);
+        var routingGraphSnapshot = overlayBuilder.BuildSnapshot();
+        var planningResult = await routePlanningStrategy.PlanAsync(
+            startNodeId,
+            endNodeId,
+            routingGraphSnapshot,
+            ct
+        );
 
-        int startNodeId = await ResolveEndpointNodeIdAsync(
-            effectiveStartPosition,
-            configuredDepotPosition,
-            configuredDepotNodeId,
-            overlayBuilder,
-            ct);
-
-        int endNodeId = await ResolveEndpointNodeIdAsync(
-            effectiveEndPosition,
-            configuredDepotPosition,
-            configuredDepotNodeId,
-            overlayBuilder,
-            ct);
-
-        GraphSnapshot routingSnapshot = overlayBuilder.BuildSnapshot();
-
-        RoutePlanningResult planningResult = await routePlanningStrategy.PlanAsync(
-            new RoutePlanningRequest(startNodeId, _options.FillThreshold, routingSnapshot),
-            ct);
-
-        // Fetch depot node position
-        Position depotPosition = overlayBuilder.TryGetVirtualPosition(depotNodeId, out Position? virtualDepot)
-            ? virtualDepot!
-            : configuredDepotNodeId == depotNodeId
-                ? configuredDepotPosition
-                : throw new InvalidOperationException($"Depot node {depotNodeId} not found");
-
-        var orderedNodeIds = planningResult.NodeVisitOrder.ToList();
-        if (orderedNodeIds.Count > 0)
+        Position depotPosition;
+        if (overlayBuilder.TryGetVirtualPosition(depotNodeId, out var virtualDepot))
         {
-            orderedNodeIds[^1] = endNodeId;
+            depotPosition = virtualDepot!;
+        }
+        else if (configuredDepotNodeId == depotNodeId)
+        {
+            depotPosition = configuredDepotPosition;
+        }
+        else
+        {
+            throw new InvalidOperationException($"Depot node {depotNodeId} not found");
         }
 
-        var expandedNodeIds = await ExpandRouteNodeIdsAsync(orderedNodeIds, routingSnapshot, ct);
+        var orderedNodeIds = planningResult.NodeVisitOrder;
+
+        var expandedNodeIds = await ExpandRouteNodeIdsAsync(orderedNodeIds, routingGraphSnapshot, ct);
 
         var selectedSensorNodeIds = planningResult.SelectedSensors
             .Select(sensor => sensor.NodeId)
@@ -131,8 +107,6 @@ internal sealed class CollectionRoutingService(
             })
             .ToList();
 
-        double totalDistance = await ComputeTotalDistanceAsync(orderedNodeIds, routingSnapshot, ct);
-
         totalSw.Stop();
 
         return new CollectionRouteResponseDto
@@ -141,9 +115,41 @@ internal sealed class CollectionRoutingService(
             OrderedNodeCoordinates = orderedNodeCoordinates,
             Stops = stops,
             SelectedSensors = selectedSensors,
-            TotalDistance = totalDistance,
+            TotalDistance = planningResult.TotalDistance,
             RouteGenerationMs = totalSw.Elapsed.TotalMilliseconds
         };
+    }
+
+    private async Task<(int depotNodeId, int startNodeId, int endNodeId)> ResolveRouteEndpointNodeIds(CollectionRouteRequestOptionsDto? options, int configuredDepotNodeId, EphemeralGraphOverlayBuilder overlayBuilder, Position configuredDepotPosition, CancellationToken ct)
+    {
+        var effectiveDepotPosition = options?.DepotPosition ?? configuredDepotPosition;
+        var effectiveStartPosition = options?.StartPosition ?? effectiveDepotPosition;
+        var effectiveEndPosition = options?.EndPosition ?? effectiveDepotPosition;
+
+        int depotNodeId = await ResolveEndpointNodeIdAsync(
+            effectiveDepotPosition,
+            configuredDepotPosition,
+            configuredDepotNodeId,
+            overlayBuilder,
+            ct
+        );
+
+        int startNodeId = await ResolveEndpointNodeIdAsync(
+            effectiveStartPosition,
+            configuredDepotPosition,
+            configuredDepotNodeId,
+            overlayBuilder,
+            ct
+        );
+
+        int endNodeId = await ResolveEndpointNodeIdAsync(
+            effectiveEndPosition,
+            configuredDepotPosition,
+            configuredDepotNodeId,
+            overlayBuilder,
+            ct
+        );
+        return (depotNodeId, startNodeId, endNodeId);
     }
 
     private async Task<int> ResolveEndpointNodeIdAsync(
@@ -167,38 +173,8 @@ internal sealed class CollectionRoutingService(
         return overlayBuilder.AddProjectedNode(projection);
     }
 
-    private async Task<double> ComputeTotalDistanceAsync(
-        IReadOnlyList<int> orderedNodeIds,
-        GraphSnapshot snapshot,
-        CancellationToken ct)
-    {
-        if (orderedNodeIds.Count <= 1)
-        {
-            return 0;
-        }
-
-        IReadOnlyDictionary<(int From, int To), double> matrix =
-            await shortestPathStrategy.BuildDistanceMatrixAsync(orderedNodeIds.Distinct().ToList(), snapshot, ct);
-
-        double totalDistance = 0;
-        for (int i = 0; i < orderedNodeIds.Count - 1; i++)
-        {
-            int from = orderedNodeIds[i];
-            int to = orderedNodeIds[i + 1];
-
-            if (!matrix.TryGetValue((from, to), out double distance))
-            {
-                throw new InvalidOperationException($"Missing shortest path distance from node {from} to node {to}.");
-            }
-
-            totalDistance += distance;
-        }
-
-        return totalDistance;
-    }
-
-    private async Task<IReadOnlyList<int>> ExpandRouteNodeIdsAsync(
-        IReadOnlyList<int> nodeVisitOrder,
+    private async Task<List<int>> ExpandRouteNodeIdsAsync(
+        List<int> nodeVisitOrder,
         GraphSnapshot snapshot,
         CancellationToken ct)
     {
@@ -214,7 +190,7 @@ internal sealed class CollectionRoutingService(
             int from = nodeVisitOrder[i];
             int to = nodeVisitOrder[i + 1];
 
-            IReadOnlyList<int> legPath = await shortestPathStrategy.GetShortestPathAsync(from, to, snapshot, ct);
+            var legPath = await shortestPathStrategy.GetShortestPathAsync(from, to, snapshot, ct);
             if (legPath.Count == 0)
             {
                 throw new InvalidOperationException($"Missing shortest path from node {from} to node {to}.");
@@ -232,15 +208,14 @@ internal sealed class CollectionRoutingService(
         return expandedNodeIds;
     }
 
-    private static List<Domain.ValueObjects.Position> CollapseConsecutiveDuplicateCoordinates(
-        IReadOnlyList<Domain.ValueObjects.Position> coordinates)
+    private static List<Position> CollapseConsecutiveDuplicateCoordinates(List<Position> coordinates)
     {
         if (coordinates.Count <= 1)
         {
-            return coordinates.ToList();
+            return coordinates;
         }
 
-        var deduplicated = new List<Domain.ValueObjects.Position>(coordinates.Count) { coordinates[0] };
+        var deduplicated = new List<Position>(coordinates.Count) { coordinates[0] };
         for (int i = 1; i < coordinates.Count; i++)
         {
             if (coordinates[i] == deduplicated[^1])
@@ -291,7 +266,7 @@ internal sealed class CollectionRoutingService(
             return false;
         }
 
-        public IReadOnlyDictionary<int, Position> GetVirtualPositions() => _virtualNodePositions;
+        public Dictionary<int, Position> GetVirtualPositions() => _virtualNodePositions;
 
         public int AddProjectedNode(GraphEdgeProjection projection)
         {

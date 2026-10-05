@@ -3,60 +3,62 @@ using Application.Services;
 
 namespace Infrastructure.Services;
 
+// TODO: Consider implementing a more sophisticated TSP algorithm (e.g., 2-opt, 3-opt, or genetic algorithms) for better route optimization.
 internal sealed class NearestNeighborMetricTspOrderingStrategy : IRouteOrderingStrategy
 {
-    public IReadOnlyList<int> BuildRoute(
-        int depotNodeId,
-        IReadOnlyList<int> targetNodeIds,
+    public List<int> BuildRoute(
+        int startNodeId,
+        int endNodeId,
+        List<int> targetNodeIds,
         Func<int, int, double?> tryGetDistance)
     {
-        var uniqueTargets = targetNodeIds
-            .Where(nodeId => nodeId != depotNodeId)
-            .Distinct()
-            .OrderBy(nodeId => nodeId)
+        var uniqueTargetNodeIds = targetNodeIds.Distinct()
+            .Where(id => id != startNodeId && id != endNodeId)
             .ToList();
 
-        var route = new List<int>(uniqueTargets.Count + 2) { depotNodeId };
-        if (uniqueTargets.Count == 0)
+        switch (uniqueTargetNodeIds)
         {
-            route.Add(depotNodeId);
-            return route;
+            case []:
+                return [startNodeId, endNodeId];
+
+            case [var singleNodeId]:
+                return [startNodeId, singleNodeId, endNodeId];
         }
 
-        int current = depotNodeId;
+        List<int> orderedNodeIds = [];
+        var currentNodeId = startNodeId;
 
-        while (uniqueTargets.Count > 0)
+        while (uniqueTargetNodeIds.Count > 0)
         {
-            int bestNode = -1;
+            int bestNodeId = -1;
             double bestDistance = double.MaxValue;
 
-            foreach (int candidate in uniqueTargets)
+            foreach (int candidateNodeId in uniqueTargetNodeIds)
             {
-                double? maybeDistance = tryGetDistance(current, candidate);
-                if (!maybeDistance.HasValue)
+                double? maybeDistance = tryGetDistance(currentNodeId, candidateNodeId);
+                if (maybeDistance is null)
                 {
                     continue;
                 }
 
                 double distance = maybeDistance.Value;
-                if (distance < bestDistance || (distance == bestDistance && candidate < bestNode))
+                if (distance < bestDistance)
                 {
                     bestDistance = distance;
-                    bestNode = candidate;
+                    bestNodeId = candidateNodeId;
                 }
             }
 
-            if (bestNode < 0)
+            if (bestNodeId < 0)
             {
                 throw new UnreachableSelectedBinsException();
             }
 
-            route.Add(bestNode);
-            uniqueTargets.Remove(bestNode);
-            current = bestNode;
+            orderedNodeIds.Add(bestNodeId);
+            uniqueTargetNodeIds.Remove(bestNodeId);
+            currentNodeId = bestNodeId;
         }
 
-        route.Add(depotNodeId);
-        return route;
+        return [startNodeId, ..orderedNodeIds, endNodeId];
     }
 }

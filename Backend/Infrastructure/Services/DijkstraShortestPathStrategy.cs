@@ -2,19 +2,18 @@ using Application.Services;
 
 namespace Infrastructure.Services;
 
-internal sealed class DijkstraShortestPathStrategy(
-    IGraphService graphService) : IShortestPathStrategy
+internal sealed class DijkstraShortestPathStrategy(IGraphService graphService) : IShortestPathStrategy
 {
-    public async Task<IReadOnlyDictionary<int, double>> GetShortestDistancesAsync(
+    public async Task<Dictionary<int, double>> GetShortestDistancesAsync(
         int sourceNodeId,
-        IReadOnlyCollection<int> targetNodeIds,
+        List<int> targetNodeIds,
         CancellationToken ct = default)
     {
         GraphSnapshot snapshot = await graphService.GetGraphSnapshotAsync(ct);
         return ComputeShortestDistances(sourceNodeId, targetNodeIds, snapshot, ct);
     }
 
-    public async Task<IReadOnlyList<int>> GetShortestPathAsync(
+    public async Task<List<int>> GetShortestPathAsync(
         int sourceNodeId,
         int targetNodeId,
         CancellationToken ct = default)
@@ -23,7 +22,7 @@ internal sealed class DijkstraShortestPathStrategy(
         return ComputeShortestPath(sourceNodeId, targetNodeId, snapshot, ct);
     }
 
-    public Task<IReadOnlyList<int>> GetShortestPathAsync(
+    public Task<List<int>> GetShortestPathAsync(
         int sourceNodeId,
         int targetNodeId,
         GraphSnapshot snapshot,
@@ -32,16 +31,16 @@ internal sealed class DijkstraShortestPathStrategy(
         return Task.FromResult(ComputeShortestPath(sourceNodeId, targetNodeId, snapshot, ct));
     }
 
-    public async Task<IReadOnlyDictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
-        IReadOnlyCollection<int> waypointNodeIds,
+    public async Task<Dictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
+        List<int> waypointNodeIds,
         CancellationToken ct = default)
     {
         GraphSnapshot snapshot = await graphService.GetGraphSnapshotAsync(ct);
         return await BuildDistanceMatrixAsync(waypointNodeIds, snapshot, ct);
     }
 
-    public Task<IReadOnlyDictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
-        IReadOnlyCollection<int> waypointNodeIds,
+    public Task<Dictionary<(int From, int To), double>> BuildDistanceMatrixAsync(
+        List<int> waypointNodeIds,
         GraphSnapshot snapshot,
         CancellationToken ct = default)
     {
@@ -61,12 +60,12 @@ internal sealed class DijkstraShortestPathStrategy(
             }
         }
 
-        return Task.FromResult((IReadOnlyDictionary<(int From, int To), double>)matrix);
+        return Task.FromResult(matrix);
     }
 
-    private static IReadOnlyDictionary<int, double> ComputeShortestDistances(
+    private static Dictionary<int, double> ComputeShortestDistances(
         int sourceNodeId,
-        IReadOnlyCollection<int> targetNodeIds,
+        List<int> targetNodeIds,
         GraphSnapshot snapshot,
         CancellationToken ct)
     {
@@ -122,7 +121,7 @@ internal sealed class DijkstraShortestPathStrategy(
             }
         }
 
-        var result = new Dictionary<int, double>(targetNodeIds.Count);
+        var result = new Dictionary<int, double>(targetNodeIds.Count());
         foreach (int targetNodeId in targetNodeIds)
         {
             if (distances.TryGetValue(targetNodeId, out double distance))
@@ -134,7 +133,7 @@ internal sealed class DijkstraShortestPathStrategy(
         return result;
     }
 
-    private static IReadOnlyList<int> ComputeShortestPath(
+    private static List<int> ComputeShortestPath(
         int sourceNodeId,
         int targetNodeId,
         GraphSnapshot snapshot,

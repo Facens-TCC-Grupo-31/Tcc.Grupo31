@@ -1,16 +1,16 @@
 namespace Application.Services;
 
-public sealed record RoutePlanningRequest(
-    int DepotNodeId,
-    float FillThreshold,
-    GraphSnapshot? Snapshot = null);
-
 public sealed record RoutePlanningResult(
-    IReadOnlyList<int> NodeVisitOrder,
-    IReadOnlyList<SelectedCollectionPoint> SelectedSensors,
+    List<int> NodeVisitOrder,
+    List<SelectedCollectionPoint> SelectedSensors,
     double TotalDistance);
 
 public interface IRoutePlanningStrategy
 {
-    Task<RoutePlanningResult> PlanAsync(RoutePlanningRequest request, CancellationToken ct = default);
+    Task<RoutePlanningResult> PlanAsync(
+        int startNodeId,
+        int endNodeId,
+        GraphSnapshot? snapshot = null,
+        CancellationToken ct = default
+    );
 }

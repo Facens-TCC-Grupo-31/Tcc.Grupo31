@@ -8,5 +8,5 @@ public sealed record SelectedCollectionPoint(
 
 public interface IPointSelectionStrategy
 {
-    Task<IReadOnlyList<SelectedCollectionPoint>> SelectPointsAsync(float threshold, CancellationToken ct = default);
+    Task<IReadOnlyList<SelectedCollectionPoint>> SelectPointsAsync(CancellationToken ct = default);
 }

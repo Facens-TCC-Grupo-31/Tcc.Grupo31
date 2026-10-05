@@ -2,8 +2,10 @@ namespace Application.Services;
 
 public interface IRouteOrderingStrategy
 {
-    IReadOnlyList<int> BuildRoute(
-        int depotNodeId,
-        IReadOnlyList<int> targetNodeIds,
-        Func<int, int, double?> tryGetDistance);
+    List<int> BuildRoute(
+        int startNodeId,
+        int endNodeId,
+        List<int> targetNodeIds,
+        Func<int, int, double?> tryGetDistance
+    );
 }
