@@ -14,12 +14,10 @@ public sealed class AnalyticalScenarioExecutor(
         SimulationScenarioDefinition definition,
         string scenarioName,
         DateTime startTimeUtc,
-        string logsDirectory,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(scenarioName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(logsDirectory);
 
         Console.WriteLine(definition.Graph.OsmPath);
 

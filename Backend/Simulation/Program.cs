@@ -4,9 +4,6 @@ using System.Diagnostics;
 
 SimulationCommandLineOptions commandLine = SimulationCommandLineOptions.Parse(args);
 
-string logsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Simulation", "logs");
-Directory.CreateDirectory(logsDirectory);
-
 var executor = new AnalyticalScenarioExecutor();
 
 var scenarioDefinition = commandLine.Scenario switch
@@ -19,8 +16,7 @@ var scenarioDefinition = commandLine.Scenario switch
 var simulationResult = await executor.ExecuteAsync(
     scenarioDefinition,
     commandLine.Scenario.ToString(),
-    DateTime.UtcNow,
-    logsDirectory
+    DateTime.UtcNow
 );
 
 Console.WriteLine(SimulationOutput.FormatSummary(simulationResult));
