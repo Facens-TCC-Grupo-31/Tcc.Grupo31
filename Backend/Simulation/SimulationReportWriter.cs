@@ -1,84 +1,146 @@
-using System.Text.Json;
 using Domain.ValueObjects;
+using System.Collections;
+using System.Text.Json;
 
 namespace Simulation;
 
-public static class SimulationReportWriter
+public interface ISimulationReportWriter
 {
+    Task<string> WriteAsync(
+        SimulationRunResult result,
+        string scenarioName,
+        CancellationToken ct = default);
+}
+
+public class SimulationReportWriter : ISimulationReportWriter
+{
+    private const string ReportFileNameFormat = "simulation-{0}-{1:yyyyMMddHHmmss}.json";
+
+    private static readonly string _logsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Simulation", "logs");
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static async Task WriteAsync(
-        string filePath,
+    public async Task<string> WriteAsync(
         SimulationRunResult result,
         string scenarioName,
         CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(result);
         ArgumentException.ThrowIfNullOrWhiteSpace(scenarioName);
 
-        string? directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        string filePath = Path.Combine(_logsDirectory, GetReportFileName(scenarioName));
+
+        Directory.CreateDirectory(_logsDirectory);
 
         var report = new SimulationReportDto(
             scenarioName,
             DateTime.UtcNow,
-            new SimulationSummaryDto(
-                result.SimulationDuration,
-                result.CollectionCount,
-                result.OverflowEventCount,
-                result.TotalOverflowDuration,
-                result.MaximumSingleSensorOverflowDuration,
-                result.TotalCollectedVolumeLiters,
-                result.TotalRouteDistance),
-            result.OverflowEvents.Select(@event => new SimulationOverflowEventDto(
-                @event.SensorId,
-                @event.StartedAt,
-                @event.EndedAt,
-                @event.Duration)).ToArray(),
-            result.Ticks.Select(tick => new SimulationTickReportDto(
-                tick.Timestamp,
-                new SimulationTickStateDto(
-                    tick.TriggerContext.ActiveSensorCount,
-                    tick.TriggerContext.AverageFillLevel,
-                    tick.TriggerContext.CriticalSensorIds,
-                    tick.Readings.Select(reading => new SimulationReadingReportDto(
-                        reading.SensorId,
-                        reading.FillLevel,
-                        reading.Timestamp)).ToArray()),
-                tick.CollectionTriggered,
-                tick.RouteExecution is null
-                    ? null
-                    : new SimulationRouteReportDto(
-                        tick.RouteExecution.Mode.ToString(),
-                        tick.RouteExecution.FixedRouteCoordinates.Select(ToCoordinate).ToArray()),
-                tick.Collection is null
-                    ? null
-                    : new SimulationCollectionReportDto(
-                        tick.Collection.ServedSensorIds,
-                        tick.Collection.CollectedVolumeLiters,
-                        tick.Collection.RouteDistance))).ToArray());
+            MapSummary(result),
+            result.OverflowEvents.Select(MapOverflowEvent),
+            result.Ticks.Select(MapTick)
+        );
 
         await using FileStream stream = File.Create(filePath);
         await JsonSerializer.SerializeAsync(stream, report, JsonOptions, ct);
+
+        return filePath;
     }
 
-    private static SimulationCoordinateDto ToCoordinate(Position position) =>
-        new(position.Latitude, position.Longitude);
+    private static SimulationSummaryDto MapSummary(SimulationRunResult result) =>
+        new(result.SimulationDuration,
+            result.CollectionCount,
+            result.OverflowEventCount,
+            result.TotalOverflowDuration,
+            result.MaximumSingleSensorOverflowDuration,
+            result.TotalCollectedVolumeLiters,
+            result.TotalRouteDistance);
+
+    private static SimulationOverflowEventDto MapOverflowEvent(SimulationOverflowEvent @event) =>
+        new(@event.SensorId, @event.StartedAt, @event.EndedAt, @event.Duration);
+
+    private static SimulationTickReportDto MapTick(SimulationTickResult tick) =>
+        new(tick.Timestamp,
+            MapTickState(tick),
+            tick.CollectionTriggered,
+            tick.RouteExecution is null ? null : MapRoute(tick.RouteExecution, tick.Collection),
+            tick.Collection is null ? null : MapCollection(tick.Collection));
+
+    private static SimulationTickStateDto MapTickState(SimulationTickResult tick) =>
+        new(tick.TriggerContext.ActiveSensorCount,
+            tick.TriggerContext.AverageFillLevel,
+            tick.TriggerContext.CriticalSensorIds,
+            tick.Readings.Select(MapReading));
+
+    private static SimulationReadingReportDto MapReading(SimulationSensorReading reading) =>
+        new(reading.SensorId, reading.FillLevel, reading.Timestamp);
+
+    private static GeoJsonFeatureCollectionDto MapRoute(
+        CollectionRouteExecutionDecision route,
+        CollectionExecutionResult? collection)
+    {
+        var features = new List<GeoJsonFeatureDto>
+        {
+            new(
+                Geometry: new GeoJsonLineStringDto(route.FixedRouteCoordinates.Select(p => new[] { p.Longitude, p.Latitude })),
+                Properties: new { Mode = route.Mode.ToString() }
+            )
+        };
+
+        var coords = route.FixedRouteCoordinates;
+        if (coords.Count > 0)
+        {
+            var start = coords[0];
+            var end = coords[^1];
+
+            bool isSameStartEnd = Math.Abs(start.Latitude - end.Latitude) < 0.000001 &&
+                                  Math.Abs(start.Longitude - end.Longitude) < 0.000001;
+
+            if (isSameStartEnd)
+            {
+                features.Add(CreatePointFeature(start, "Start/End"));
+            }
+            else
+            {
+                features.Add(CreatePointFeature(start, "Start"));
+                features.Add(CreatePointFeature(end, "End"));
+            }
+
+            if (collection is not null && collection.ServedSensorIds.Any())
+            {
+                int stopIndex = 1;
+                foreach (var (sensorId, pos) in collection.ServedSensorIds.Zip(coords.Skip(1)))
+                {
+                    features.Add(CreatePointFeature(pos, $"{stopIndex} (SensorId: {sensorId})"));
+                    stopIndex++;
+                }
+            }
+        }
+
+        return new GeoJsonFeatureCollectionDto(features);
+    }
+
+    private static GeoJsonFeatureDto CreatePointFeature(Position position, string name) =>
+        new(
+            Geometry: new GeoJsonPointDto(new[] { position.Longitude, position.Latitude }),
+            Properties: new { Name = name }
+        );
+
+    private static SimulationCollectionReportDto MapCollection(CollectionExecutionResult collection) =>
+        new(collection.ServedSensorIds, collection.CollectedVolumeLiters, collection.RouteDistanceKilometers);
+
+    private static string GetReportFileName(string scenarioName) =>
+        string.Format(ReportFileNameFormat, scenarioName.ToLowerInvariant(), DateTime.Now);
 
     private sealed record SimulationReportDto(
         string ScenarioName,
         DateTime GeneratedAtUtc,
         SimulationSummaryDto Summary,
-        IReadOnlyList<SimulationOverflowEventDto> OverflowEvents,
-        IReadOnlyList<SimulationTickReportDto> Ticks);
+        IEnumerable OverflowEvents,
+        IEnumerable Ticks);
 
     private sealed record SimulationSummaryDto(
         TimeSpan SimulationDuration,
@@ -99,28 +161,39 @@ public static class SimulationReportWriter
         DateTime Timestamp,
         SimulationTickStateDto State,
         bool CollectionTriggered,
-        SimulationRouteReportDto? Route,
+        GeoJsonFeatureCollectionDto? Route,
         SimulationCollectionReportDto? Collection);
 
     private sealed record SimulationTickStateDto(
         int ActiveSensorCount,
         float AverageFillLevel,
-        IReadOnlyList<long> ActiveCriticalSensorIds,
-        IReadOnlyList<SimulationReadingReportDto> Readings);
+        IEnumerable ActiveCriticalSensorIds,
+        IEnumerable Readings);
 
     private sealed record SimulationReadingReportDto(
         long SensorId,
         float FillLevel,
         DateTime Timestamp);
 
-    private sealed record SimulationRouteReportDto(
-        string Mode,
-        IReadOnlyList<SimulationCoordinateDto> Coordinates);
+    private sealed record GeoJsonFeatureCollectionDto(
+        IEnumerable Features,
+        string Type = "FeatureCollection");
+
+    private sealed record GeoJsonFeatureDto(
+        object Geometry,
+        object Properties,
+        string Type = "Feature");
+
+    private sealed record GeoJsonLineStringDto(
+        IEnumerable Coordinates,
+        string Type = "LineString");
+
+    private sealed record GeoJsonPointDto(
+        IEnumerable Coordinates,
+        string Type = "Point");
 
     private sealed record SimulationCollectionReportDto(
-        IReadOnlyList<long> ServedSensorIds,
+        IEnumerable ServedSensorIds,
         float CollectedVolumeLiters,
         double RouteDistance);
-
-    private sealed record SimulationCoordinateDto(double Latitude, double Longitude);
 }

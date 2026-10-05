@@ -31,7 +31,8 @@ public sealed class SimulationApplicationHarness(
             definition,
             environment.RouteProvider,
             startTimeUtc,
-            ct,
-            environment.ReadingSink);
+            environment.ReadingSink,
+            ct
+        );
     }
 }

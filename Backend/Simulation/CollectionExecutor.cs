@@ -1,3 +1,4 @@
+using Application.Common.Utils;
 using Domain.ValueObjects;
 
 namespace Simulation;
@@ -5,10 +6,13 @@ namespace Simulation;
 public sealed record CollectionExecutionResult(
     IReadOnlyList<long> ServedSensorIds,
     float CollectedVolumeLiters,
-    double RouteDistance);
+    double RouteDistanceKilometers
+);
 
 public sealed class CollectionExecutor
 {
+    private readonly LocalApproximateDistanceCalculator _distanceCalculator = new();
+
     public CollectionExecutionResult Execute(
         IReadOnlyList<SimulationSensorState> sensors,
         IReadOnlyList<long> servedSensorIds,
@@ -32,37 +36,23 @@ public sealed class CollectionExecutor
         }
 
         return new CollectionExecutionResult(
-            servedSensors.Select(sensor => sensor.SensorId).ToArray(),
+            servedSensors.Select(sensor => sensor.SensorId).ToList(),
             collectedVolumeLiters,
-            CalculateRouteDistance(routeCoordinates));
+            ToKilometers(CalculateRouteDistanceMeters(routeCoordinates))
+        );
     }
 
-    private static double CalculateRouteDistance(IReadOnlyList<Position> coordinates)
+    private double CalculateRouteDistanceMeters(IReadOnlyList<Position> coordinates)
     {
-        double totalDistanceKm = 0;
+        double totalDistanceMeters = 0;
 
         for (var index = 1; index < coordinates.Count; index++)
         {
-            totalDistanceKm += HaversineDistanceKm(coordinates[index - 1], coordinates[index]);
+            totalDistanceMeters += _distanceCalculator.CalculateDistanceMeters(coordinates[index - 1], coordinates[index]);
         }
 
-        return totalDistanceKm;
+        return totalDistanceMeters;
     }
 
-    private static double HaversineDistanceKm(Position first, Position second)
-    {
-        const double earthRadiusKm = 6371.0088;
-        double latitudeDelta = DegreesToRadians(second.Latitude - first.Latitude);
-        double longitudeDelta = DegreesToRadians(second.Longitude - first.Longitude);
-        double firstLatitude = DegreesToRadians(first.Latitude);
-        double secondLatitude = DegreesToRadians(second.Latitude);
-
-        double haversine = Math.Pow(Math.Sin(latitudeDelta / 2), 2)
-            + Math.Cos(firstLatitude) * Math.Cos(secondLatitude)
-            * Math.Pow(Math.Sin(longitudeDelta / 2), 2);
-
-        return earthRadiusKm * 2 * Math.Asin(Math.Sqrt(haversine));
-    }
-
-    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
+    private static double ToKilometers(double meters) => meters / 1000.0;
 }

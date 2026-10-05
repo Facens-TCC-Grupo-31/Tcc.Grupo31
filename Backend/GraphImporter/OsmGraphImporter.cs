@@ -69,7 +69,7 @@ public static class OsmGraphImporter
                 if (!edgeSet.Add(key))
                     continue;
 
-                double distance = new LocalApproximateDistanceCalculator().Calculate(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
+                double distance = new LocalApproximateDistanceCalculator().CalculateDistanceMeters(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
 
                 edges.Add(new GraphEdge { FromNodeId = from.Id, ToNodeId = to.Id, Distance = distance });
                 edges.Add(new GraphEdge { FromNodeId = to.Id, ToNodeId = from.Id, Distance = distance });

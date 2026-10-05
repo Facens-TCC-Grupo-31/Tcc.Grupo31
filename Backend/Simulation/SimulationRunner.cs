@@ -41,7 +41,7 @@ public sealed record SimulationRunResult(
 
     public double TotalRouteDistance => Ticks
         .Where(tick => tick.Collection is not null)
-        .Sum(tick => tick.Collection!.RouteDistance);
+        .Sum(tick => tick.Collection!.RouteDistanceKilometers);
 
     public int OverflowEventCount => OverflowEvents.Count;
 

@@ -4,10 +4,6 @@ using System.Diagnostics;
 
 SimulationCommandLineOptions commandLine = SimulationCommandLineOptions.Parse(args);
 
-bool isUsingDynamicRoute = commandLine.Scenario is SimulationScenarioKind.Dynamic;
-
-//var scenarioDefinition = 
-
 string logsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Simulation", "logs");
 Directory.CreateDirectory(logsDirectory);
 
@@ -28,7 +24,10 @@ var simulationResult = await executor.ExecuteAsync(
 );
 
 Console.WriteLine(SimulationOutput.FormatSummary(simulationResult));
-await WriteReportAsync(commandLine.Scenario.ToString(), simulationResult)
+
+var simulationReportWriter = new SimulationReportWriter();
+
+await simulationReportWriter.WriteAsync(simulationResult, commandLine.Scenario.ToString())
     .ContinueWith(task =>
     {
         if (task.IsCompletedSuccessfully)
@@ -40,13 +39,3 @@ await WriteReportAsync(commandLine.Scenario.ToString(), simulationResult)
             Console.WriteLine($"Failed to write report file: {task.Exception?.GetBaseException().Message}");
         }
     });
-
-static async Task<string> WriteReportAsync(string scenarioName, SimulationRunResult result)
-{
-    string logsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Simulation", "logs");
-    Directory.CreateDirectory(logsDirectory);
-    string fileName = $"simulation-{scenarioName.ToLowerInvariant()}-{DateTime.UtcNow:yyyyMMddTHHmmssZ}-{Guid.NewGuid():N}.json";
-    string filePath = Path.Combine(logsDirectory, fileName);
-    await SimulationReportWriter.WriteAsync(filePath, result, scenarioName);
-    return filePath;
-}

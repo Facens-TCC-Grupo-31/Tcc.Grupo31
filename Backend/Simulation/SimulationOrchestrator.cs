@@ -8,8 +8,8 @@ public sealed class SimulationOrchestrator
         SimulationScenarioDefinition definition,
         ISimulationRouteProvider routeProvider,
         DateTime startTimeUtc,
-        CancellationToken ct = default,
-        ISimulationReadingSink? readingSink = null)
+        ISimulationReadingSink? readingSink = null,
+        CancellationToken ct = default)
     {
         ValidateDefinition(definition);
         ArgumentNullException.ThrowIfNull(routeProvider);
@@ -46,12 +46,12 @@ public sealed class SimulationOrchestrator
                     sensor.CurrentFillLevel,
                     timestamp))
                 .ToList();
-            
+
             var overflowingSensorIds = readings
                 .Where(reading => reading.FillLevel >= 1)
                 .Select(reading => reading.SensorId)
                 .ToArray();
-            
+
             float averageFillLevel = readings.Count == 0
                 ? 0
                 : readings.Average(reading => reading.FillLevel);
@@ -77,14 +77,14 @@ public sealed class SimulationOrchestrator
             if (collectionTriggered)
             {
                 SimulationRoute route = await routeProvider.GetRouteAsync(ct);
-                
+
                 routeExecution = new CollectionRouteExecutionDecision(
                     definition.Route is null
                         ? CollectionRouteExecutionMode.ApplicationStrategy
                         : CollectionRouteExecutionMode.FixedBaselineRoute,
                     route.Coordinates
                 );
-                
+
                 collection = _collectionExecutor.Execute(
                     sensorStates,
                     route.SensorIds,

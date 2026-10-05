@@ -85,8 +85,8 @@ internal sealed class GraphService(
             edge.FromNodeId,
             edge.ToNodeId,
             new Position(projectedLatitude, projectedLongitude),
-            _coordinateDistanceCalculator.Calculate(fromNode.Latitude, fromNode.Longitude, projectedLatitude, projectedLongitude),
-            _coordinateDistanceCalculator.Calculate(toNode.Latitude, toNode.Longitude, projectedLatitude, projectedLongitude),
+            _coordinateDistanceCalculator.CalculateDistanceMeters(fromNode.Latitude, fromNode.Longitude, projectedLatitude, projectedLongitude),
+            _coordinateDistanceCalculator.CalculateDistanceMeters(toNode.Latitude, toNode.Longitude, projectedLatitude, projectedLongitude),
             hasReverseEdge);
     }
 
@@ -110,7 +110,7 @@ internal sealed class GraphService(
         var (edge, projectedLongitude, projectedLatitude) = FindNearestEdge(position.Longitude, position.Latitude);
         GraphNode nearestFrom = Nodes[edge.FromNodeId];
         GraphNode nearestTo = Nodes[edge.ToNodeId];
-        double projectionDistance = _coordinateDistanceCalculator.Calculate(position.Latitude, position.Longitude, projectedLatitude, projectedLongitude);
+        double projectionDistance = _coordinateDistanceCalculator.CalculateDistanceMeters(position.Latitude, position.Longitude, projectedLatitude, projectedLongitude);
 
         logger.LogInformation(
             "Graph split input lat={Latitude}, lon={Longitude}; nearest edge {EdgeId} from (lat={FromLat}, lon={FromLon}) to (lat={ToLat}, lon={ToLon}); projected to (lat={ProjectedLat}, lon={ProjectedLon}) with distance {ProjectionDistance}",
@@ -148,13 +148,13 @@ internal sealed class GraphService(
         {
             FromNodeId = fromNode.Id,
             ToNodeId = newNode.Id,
-            Distance = _coordinateDistanceCalculator.Calculate(fromNode.Latitude, fromNode.Longitude, newNode.Latitude, newNode.Longitude)
+            Distance = _coordinateDistanceCalculator.CalculateDistanceMeters(fromNode.Latitude, fromNode.Longitude, newNode.Latitude, newNode.Longitude)
         };
         var edge2 = new GraphEdge
         {
             FromNodeId = newNode.Id,
             ToNodeId = toNode.Id,
-            Distance = _coordinateDistanceCalculator.Calculate(newNode.Latitude, newNode.Longitude, toNode.Latitude, toNode.Longitude)
+            Distance = _coordinateDistanceCalculator.CalculateDistanceMeters(newNode.Latitude, newNode.Longitude, toNode.Latitude, toNode.Longitude)
         };
 
         var newEdges = new List<GraphEdge> { edge1, edge2 };
@@ -166,14 +166,14 @@ internal sealed class GraphService(
             {
                 FromNodeId = toNode.Id,
                 ToNodeId = newNode.Id,
-                Distance = _coordinateDistanceCalculator.Calculate(toNode.Latitude, toNode.Longitude, newNode.Latitude, newNode.Longitude)
+                Distance = _coordinateDistanceCalculator.CalculateDistanceMeters(toNode.Latitude, toNode.Longitude, newNode.Latitude, newNode.Longitude)
             };
 
             var edge4 = new GraphEdge
             {
                 FromNodeId = newNode.Id,
                 ToNodeId = fromNode.Id,
-                Distance = _coordinateDistanceCalculator.Calculate(newNode.Latitude, newNode.Longitude, fromNode.Latitude, fromNode.Longitude)
+                Distance = _coordinateDistanceCalculator.CalculateDistanceMeters(newNode.Latitude, newNode.Longitude, fromNode.Latitude, fromNode.Longitude)
             };
 
             newEdges.Add(edge3);
@@ -331,7 +331,7 @@ internal sealed class GraphService(
                 toNode.Longitude,
                 toNode.Latitude);
 
-            double distanceSquared = _coordinateDistanceCalculator.CalculateSquared(latitude, longitude, projectedLatitude, projectedLongitude);
+            double distanceSquared = _coordinateDistanceCalculator.CalculateSquaredDistanceMeters(latitude, longitude, projectedLatitude, projectedLongitude);
             if (distanceSquared < nearestDistanceSquared)
             {
                 nearestDistanceSquared = distanceSquared;

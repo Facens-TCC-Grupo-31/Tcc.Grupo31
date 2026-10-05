@@ -7,16 +7,16 @@ public sealed class LocalApproximateDistanceCalculator : ICoordinateDistanceCalc
     private const double MetersPerDegree = 111_120.0;
     private const double DegreesToRadians = Math.PI / 180.0;
 
-    public double Calculate(Position from, Position to)
-        => Calculate(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
+    public double CalculateDistanceMeters(Position from, Position to)
+        => CalculateDistanceMeters(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
 
-    public double CalculateSquared(Position from, Position to)
-        => CalculateSquared(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
+    public double CalculateSquaredDistanceMeters(Position from, Position to)
+        => CalculateSquaredDistanceMeters(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
 
-    public double Calculate(double latitudeA, double longitudeA, double latitudeB, double longitudeB)
-        => Math.Sqrt(CalculateSquared(latitudeA, longitudeA, latitudeB, longitudeB));
+    public double CalculateDistanceMeters(double latitudeA, double longitudeA, double latitudeB, double longitudeB)
+        => Math.Sqrt(CalculateSquaredDistanceMeters(latitudeA, longitudeA, latitudeB, longitudeB));
 
-    public double CalculateSquared(double latA, double lonA, double latB, double lonB)
+    public double CalculateSquaredDistanceMeters(double latA, double lonA, double latB, double lonB)
     {
         double latitudeDeltaMeters = (latA - latB) * MetersPerDegree;
 
