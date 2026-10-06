@@ -18,7 +18,7 @@ public sealed record CollectionTriggerContext(
 
 public sealed record CollectionRouteExecutionDecision(
     CollectionRouteExecutionMode Mode,
-    IReadOnlyList<Position> FixedRouteCoordinates);
+    IReadOnlyList<Position> RouteCoordinates);
 
 public interface ICollectionTriggerPolicy
 {

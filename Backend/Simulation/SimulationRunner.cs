@@ -31,7 +31,8 @@ public sealed record SimulationTickResult(
 public sealed record SimulationRunResult(
     IReadOnlyList<SimulationTickResult> Ticks,
     TimeSpan SimulationDuration,
-    IReadOnlyList<SimulationOverflowEvent> OverflowEvents)
+    IReadOnlyList<SimulationOverflowEvent> OverflowEvents,
+    SimulationScenarioDefinition Definition)
 {
     public int CollectionCount => Ticks.Count(tick => tick.CollectionTriggered);
 

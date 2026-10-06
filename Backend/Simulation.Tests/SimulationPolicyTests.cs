@@ -69,7 +69,7 @@ public sealed class SimulationPolicyTests
             new CollectionRouteRequestOptionsDto());
 
         Assert.Equal(CollectionRouteExecutionMode.FixedBaselineRoute, decision.Mode);
-        Assert.NotEmpty(decision.FixedRouteCoordinates);
+        Assert.NotEmpty(decision.RouteCoordinates);
     }
 
     [Fact]

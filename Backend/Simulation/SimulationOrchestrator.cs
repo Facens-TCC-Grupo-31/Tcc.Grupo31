@@ -94,21 +94,19 @@ public sealed class SimulationOrchestrator
 
             overflowTracker.ProcessTick(timestamp, overflowingSensorIds, collection);
 
-            ticks.Add(
-                new SimulationTickResult(
+            ticks.Add(new(
                     timestamp,
                     readings,
                     triggerContext,
                     collectionTriggered,
                     routeExecution,
                     collection
-                )
-            );
+            ));
         }
 
         var duration = TimeSpan.FromTicks(definition.TickInterval.Ticks * definition.TickCount);
         DateTime horizon = startTimeUtc + duration;
-        return new SimulationRunResult(ticks, duration, overflowTracker.Complete(horizon));
+        return new SimulationRunResult(ticks, duration, overflowTracker.Complete(horizon), definition);
     }
 
     private static void ValidateDefinition(SimulationScenarioDefinition definition)

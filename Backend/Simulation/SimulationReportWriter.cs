@@ -41,7 +41,7 @@ public class SimulationReportWriter : ISimulationReportWriter
             DateTime.UtcNow,
             MapSummary(result),
             result.OverflowEvents.Select(MapOverflowEvent),
-            result.Ticks.Select(MapTick)
+            result.Ticks.Select(tick => MapTick(result, tick))
         );
 
         await using FileStream stream = File.Create(filePath);
@@ -62,11 +62,11 @@ public class SimulationReportWriter : ISimulationReportWriter
     private static SimulationOverflowEventDto MapOverflowEvent(SimulationOverflowEvent @event) =>
         new(@event.SensorId, @event.StartedAt, @event.EndedAt, @event.Duration);
 
-    private static SimulationTickReportDto MapTick(SimulationTickResult tick) =>
+    private static SimulationTickReportDto MapTick(SimulationRunResult result, SimulationTickResult tick) =>
         new(tick.Timestamp,
             MapTickState(tick),
             tick.CollectionTriggered,
-            tick.RouteExecution is null ? null : MapRoute(tick.RouteExecution, tick.Collection),
+            tick.RouteExecution is null ? null : MapRoute(result, tick.RouteExecution, tick.Collection),
             tick.Collection is null ? null : MapCollection(tick.Collection));
 
     private static SimulationTickStateDto MapTickState(SimulationTickResult tick) =>
@@ -79,22 +79,22 @@ public class SimulationReportWriter : ISimulationReportWriter
         new(reading.SensorId, reading.FillLevel, reading.Timestamp);
 
     private static GeoJsonFeatureCollectionDto MapRoute(
+        SimulationRunResult result,
         CollectionRouteExecutionDecision route,
         CollectionExecutionResult? collection)
     {
         var features = new List<GeoJsonFeatureDto>
         {
             new(
-                Geometry: new GeoJsonLineStringDto(route.FixedRouteCoordinates.Select(p => new[] { p.Longitude, p.Latitude })),
+                Geometry: new GeoJsonLineStringDto(route.RouteCoordinates.Select(p => new[] { p.Longitude, p.Latitude })),
                 Properties: new { Mode = route.Mode.ToString() }
             )
         };
 
-        var coords = route.FixedRouteCoordinates;
-        if (coords.Count > 0)
+        if (route.RouteCoordinates.Count > 0)
         {
-            var start = coords[0];
-            var end = coords[^1];
+            var start = route.RouteCoordinates[0];
+            var end = route.RouteCoordinates[^1];
 
             bool isSameStartEnd = Math.Abs(start.Latitude - end.Latitude) < 0.000001 &&
                                   Math.Abs(start.Longitude - end.Longitude) < 0.000001;
@@ -108,15 +108,11 @@ public class SimulationReportWriter : ISimulationReportWriter
                 features.Add(CreatePointFeature(start, "Start"));
                 features.Add(CreatePointFeature(end, "End"));
             }
-
-            if (collection is not null && collection.ServedSensorIds.Any())
+            
+            for (var i = 0; i < collection!.ServedSensorIds.Count; i++)
             {
-                int stopIndex = 1;
-                foreach (var (sensorId, pos) in collection.ServedSensorIds.Zip(coords.Skip(1)))
-                {
-                    features.Add(CreatePointFeature(pos, $"{stopIndex} (SensorId: {sensorId})"));
-                    stopIndex++;
-                }
+                var sensor = result.Definition.Sensors.First(s => s.SensorId == collection.ServedSensorIds[i]);
+                features.Add(CreatePointFeature(sensor.Position!, $"{i + 1} (SensorId: {sensor.SensorId})"));
             }
         }
 
