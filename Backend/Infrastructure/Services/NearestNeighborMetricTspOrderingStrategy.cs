@@ -3,7 +3,6 @@ using Application.Services;
 
 namespace Infrastructure.Services;
 
-// TODO: Consider implementing a more sophisticated TSP algorithm (e.g., 2-opt, 3-opt, or genetic algorithms) for better route optimization.
 internal sealed class NearestNeighborMetricTspOrderingStrategy : IRouteOrderingStrategy
 {
     public List<int> BuildRoute(

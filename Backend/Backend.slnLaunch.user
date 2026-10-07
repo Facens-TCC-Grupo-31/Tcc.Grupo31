@@ -1,0 +1,12 @@
+[
+  {
+    "Name": "Sim",
+    "Projects": [
+      {
+        "Path": "Simulation\\Simulation.csproj",
+        "Action": "Start",
+        "DebugTarget": "Simulation"
+      }
+    ]
+  }
+]

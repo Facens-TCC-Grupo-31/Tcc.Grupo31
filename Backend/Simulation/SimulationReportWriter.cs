@@ -108,11 +108,11 @@ public class SimulationReportWriter : ISimulationReportWriter
                 features.Add(CreatePointFeature(start, "Start"));
                 features.Add(CreatePointFeature(end, "End"));
             }
-            
+
             for (var i = 0; i < collection!.ServedSensorIds.Count; i++)
             {
                 var sensor = result.Definition.Sensors.First(s => s.SensorId == collection.ServedSensorIds[i]);
-                features.Add(CreatePointFeature(sensor.Position!, $"{i + 1} (SensorId: {sensor.SensorId})"));
+                features.Add(CreatePointFeature(sensor.Position!, $"{i + 1}"));
             }
         }
 

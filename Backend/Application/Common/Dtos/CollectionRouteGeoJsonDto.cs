@@ -13,7 +13,7 @@ public sealed class CollectionRouteGeoJsonDto
             BuildDepotFeature(route.DepotCoordinates)
         };
 
-        features.AddRange(route.SelectedSensors.Select(BuildSensorFeature));
+        features.AddRange(route.OrderedSelectedSensors.Select(BuildSensorFeature));
         features.AddRange(BuildStopFeatures(route.Stops));
 
         return new CollectionRouteGeoJsonDto
@@ -40,7 +40,7 @@ public sealed class CollectionRouteGeoJsonDto
             Properties = new Dictionary<string, object?>
             {
                 ["layer"] = "route",
-                ["totalDistance"] = route.TotalDistance,
+                ["totalDistance"] = route.TotalDistanceMeters,
                 ["routeGenerationMs"] = route.RouteGenerationMs
             }
         };

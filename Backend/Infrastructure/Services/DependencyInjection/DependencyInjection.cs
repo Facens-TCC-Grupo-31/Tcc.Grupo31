@@ -41,6 +41,7 @@ public static class DependencyInjection
             .AddScoped<DijkstraShortestPathStrategy>()
             .AddScoped<IRouteOrderingStrategy, NearestNeighborMetricTspOrderingStrategy>()
             .AddScoped<NearestNeighborMetricTspOrderingStrategy>()
+            .AddScoped<AsymmetricTwoOptOrderingStrategy>()
             .AddScoped<IRoutePlanningStrategy, ThresholdNearestNeighborMetricTspPlanner>()
             .AddScoped<IDepotNodeService, DepotNodeService>()
             .AddScoped<ICollectionRoutingService, CollectionRoutingService>();

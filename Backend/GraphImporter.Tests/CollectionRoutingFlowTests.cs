@@ -79,9 +79,9 @@ public sealed class CollectionRoutingFlowTests
         Assert.NotNull(route.DepotCoordinates);
         Assert.NotEmpty(route.OrderedNodeCoordinates);
         Assert.NotEmpty(route.Stops);
-        Assert.Single(route.SelectedSensors);
+        Assert.Single(route.OrderedSelectedSensors);
 
-        CollectionRouteSelectedSensorDto selectedSensor = route.SelectedSensors[0];
+        CollectionRouteSelectedSensorDto selectedSensor = route.OrderedSelectedSensors[0];
         Assert.Equal(sensor1.Id, selectedSensor.SensorId);
         Assert.Equal(nodeA.Id, selectedSensor.NodeId);
         Assert.Equal(0.90f, selectedSensor.FillLevel);
@@ -94,7 +94,7 @@ public sealed class CollectionRoutingFlowTests
         int depotStopCount = route.Stops.Count(stop => stop.Position == route.DepotCoordinates);
         Assert.True(depotStopCount >= 2);
 
-        Assert.True(route.TotalDistance >= 0);
+        Assert.True(route.TotalDistanceMeters >= 0);
         Assert.True(route.RouteGenerationMs > 0);
     }
 

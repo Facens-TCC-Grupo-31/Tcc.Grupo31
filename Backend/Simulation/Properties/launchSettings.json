@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Simulation": {
+      "commandName": "Project",
+      "commandLineArgs": "--scenario dynamic",
+      "workingDirectory": "C:\\Users\\pedroghiotti\\source\\repos\\Tcc\\Backend"
+    }
+  }
+}

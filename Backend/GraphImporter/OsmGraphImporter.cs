@@ -3,6 +3,8 @@ using Application.Common.Utils;
 using Domain.Entities;
 using Infrastructure.Database;
 
+namespace GraphImporter;
+
 public static class OsmGraphImporter
 {
     public static async Task ImportAsync(AppDbContext db, string osmPath, CancellationToken cancellationToken = default)
@@ -22,19 +24,24 @@ public static class OsmGraphImporter
 
         Console.WriteLine($"Parsed {osmNodes.Count} OSM nodes.");
 
+        // Update to capture one-way directional tags alongside the node references
         var highwayWays = doc.Root
             .Elements(ns + "way")
             .Where(w => w.Elements(ns + "tag").Any(t => (string?)t.Attribute("k") == "highway"))
-            .Select(w => w.Elements(ns + "nd")
-                .Select(nd => (long)nd.Attribute("ref")!)
-                .ToList())
-            .Where(refs => refs.Count >= 2)
+            .Select(w => new
+            {
+                Refs = w.Elements(ns + "nd").Select(nd => (long)nd.Attribute("ref")!).ToList(),
+                IsOneWay = w.Elements(ns + "tag").Any(t => (string?)t.Attribute("k") == "oneway" &&
+                    ((string?)t.Attribute("v") == "yes" || (string?)t.Attribute("v") == "true" || (string?)t.Attribute("v") == "1")),
+                IsReverse = w.Elements(ns + "tag").Any(t => (string?)t.Attribute("k") == "oneway" && (string?)t.Attribute("v") == "-1")
+            })
+            .Where(w => w.Refs.Count >= 2)
             .ToList();
 
         Console.WriteLine($"Found {highwayWays.Count} traversable ways.");
 
         var referencedOsmIds = highwayWays
-            .SelectMany(refs => refs)
+            .SelectMany(w => w.Refs)
             .ToHashSet();
 
         var osmIdToGraphNode = osmNodes
@@ -51,32 +58,36 @@ public static class OsmGraphImporter
         db.GraphNodes.AddRange(osmIdToGraphNode.Values);
         await db.SaveChangesAsync(cancellationToken);
 
+        // edgeSet now tracks specific (From, To) directed tuples instead of unordered pairs
         var edgeSet = new HashSet<(int, int)>();
         var edges = new List<GraphEdge>();
 
-        foreach (var refs in highwayWays)
+        foreach (var way in highwayWays)
         {
+            var refs = way.Refs;
             for (int i = 0; i < refs.Count - 1; i++)
             {
                 if (!osmIdToGraphNode.TryGetValue(refs[i], out var from) ||
                     !osmIdToGraphNode.TryGetValue(refs[i + 1], out var to))
                     continue;
 
-                var key = from.Id < to.Id
-                    ? (from.Id, to.Id)
-                    : (to.Id, from.Id);
-
-                if (!edgeSet.Add(key))
-                    continue;
-
                 double distance = new LocalApproximateDistanceCalculator().CalculateDistanceMeters(from.Latitude, from.Longitude, to.Latitude, to.Longitude);
 
-                edges.Add(new GraphEdge { FromNodeId = from.Id, ToNodeId = to.Id, Distance = distance });
-                edges.Add(new GraphEdge { FromNodeId = to.Id, ToNodeId = from.Id, Distance = distance });
+                // Add forward edge unless OSM explicitly maps it as a reverse one-way street (-1)
+                if (!way.IsReverse && edgeSet.Add((from.Id, to.Id)))
+                {
+                    edges.Add(new GraphEdge { FromNodeId = from.Id, ToNodeId = to.Id, Distance = distance });
+                }
+
+                // Add backward edge unless OSM explicitly maps it as a forward one-way street (yes/true/1)
+                if (!way.IsOneWay && edgeSet.Add((to.Id, from.Id)))
+                {
+                    edges.Add(new GraphEdge { FromNodeId = to.Id, ToNodeId = from.Id, Distance = distance });
+                }
             }
         }
 
-        Console.WriteLine($"Persisting {edges.Count} graph edges ({edges.Count / 2} unique pairs)...");
+        Console.WriteLine($"Persisting {edges.Count} graph edges...");
         db.GraphEdges.AddRange(edges);
         await db.SaveChangesAsync(cancellationToken);
     }

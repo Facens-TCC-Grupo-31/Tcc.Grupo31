@@ -87,7 +87,7 @@ internal sealed class CollectionRoutingService(
 
         orderedNodeCoordinates = CollapseConsecutiveDuplicateCoordinates(orderedNodeCoordinates);
 
-        var selectedSensors = planningResult.SelectedSensors
+        var orderedSelectedSensors = planningResult.SelectedSensors
             .Select(sensor => new CollectionRouteSelectedSensorDto
             {
                 SensorId = sensor.SensorId,
@@ -114,8 +114,8 @@ internal sealed class CollectionRoutingService(
             DepotCoordinates = depotPosition,
             OrderedNodeCoordinates = orderedNodeCoordinates,
             Stops = stops,
-            SelectedSensors = selectedSensors,
-            TotalDistance = planningResult.TotalDistance,
+            OrderedSelectedSensors = orderedSelectedSensors,
+            TotalDistanceMeters = planningResult.TotalDistance,
             RouteGenerationMs = totalSw.Elapsed.TotalMilliseconds
         };
     }

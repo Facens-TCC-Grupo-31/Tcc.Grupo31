@@ -22,9 +22,8 @@ public sealed class CollectionExecutor
         ArgumentNullException.ThrowIfNull(servedSensorIds);
         ArgumentNullException.ThrowIfNull(routeCoordinates);
 
-        var servedIds = servedSensorIds.Distinct().ToArray();
         var servedSensors = sensors
-            .Where(sensor => servedIds.Contains(sensor.SensorId))
+            .Where(sensor => servedSensorIds.Contains(sensor.SensorId))
             .ToList();
 
         float collectedVolumeLiters = servedSensors.Sum(sensor => sensor.CurrentVolumeLiters);
@@ -36,7 +35,7 @@ public sealed class CollectionExecutor
         }
 
         return new CollectionExecutionResult(
-            servedSensors.Select(sensor => sensor.SensorId).ToList(),
+            servedSensorIds,
             collectedVolumeLiters,
             ToKilometers(CalculateRouteDistanceMeters(routeCoordinates))
         );

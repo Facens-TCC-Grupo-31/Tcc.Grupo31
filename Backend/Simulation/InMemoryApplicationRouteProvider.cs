@@ -7,8 +7,7 @@ public sealed class InMemoryApplicationRouteProvider(
     ICollectionRoutingService routingService,
     IReadOnlyDictionary<long, long>? logicalToApplicationSensorIds = null) : ISimulationRouteProvider
 {
-    private readonly IReadOnlyDictionary<long, long>? _applicationToLogicalSensorIds =
-        logicalToApplicationSensorIds?.ToDictionary(pair => pair.Value, pair => pair.Key);
+    private readonly Dictionary<long, long>? _applicationToLogicalSensorIds = logicalToApplicationSensorIds?.ToDictionary(pair => pair.Value, pair => pair.Key);
 
     public async Task<SimulationRoute> GetRouteAsync(CancellationToken ct = default)
     {
@@ -16,8 +15,9 @@ public sealed class InMemoryApplicationRouteProvider(
 
         return new SimulationRoute(
             route.OrderedNodeCoordinates,
-            route.SelectedSensors.Select(sensor => ToLogicalSensorId(sensor.SensorId)).ToArray(),
-            route.TotalDistance);
+            route.OrderedSelectedSensors.Select(sensor => ToLogicalSensorId(sensor.SensorId)).ToList(),
+            route.TotalDistanceMeters / 1000
+        );
     }
 
     private long ToLogicalSensorId(long applicationSensorId)

@@ -36,7 +36,7 @@ public sealed class CollectionRouteGeoJsonTests
                     Position = new Position(-23.4699, -47.4299)
                 }
             ],
-            SelectedSensors =
+            OrderedSelectedSensors =
             [
                 new CollectionRouteSelectedSensorDto
                 {
@@ -47,7 +47,7 @@ public sealed class CollectionRouteGeoJsonTests
                     FillTimestamp = new DateTime(2026, 5, 21, 10, 0, 0, DateTimeKind.Utc)
                 }
             ],
-            TotalDistance = 1.25,
+            TotalDistanceMeters = 1.25,
             RouteGenerationMs = 30.5
         };
 
@@ -105,7 +105,7 @@ public sealed class CollectionRouteGeoJsonTests
                     Position = new Position(10, 20)
                 }
             ],
-            SelectedSensors =
+            OrderedSelectedSensors =
             [
                 new CollectionRouteSelectedSensorDto
                 {
@@ -116,7 +116,7 @@ public sealed class CollectionRouteGeoJsonTests
                     FillTimestamp = DateTime.UtcNow
                 }
             ],
-            TotalDistance = 1,
+            TotalDistanceMeters = 1,
             RouteGenerationMs = 1
         };
 

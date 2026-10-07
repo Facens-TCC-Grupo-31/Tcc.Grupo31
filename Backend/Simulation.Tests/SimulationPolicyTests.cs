@@ -356,7 +356,7 @@ public sealed class SimulationPolicyTests
             DepotCoordinates = new Position(-23.55, -46.63),
             OrderedNodeCoordinates = [new Position(-23.55, -46.63), new Position(-23.56, -46.64)],
             Stops = [],
-            SelectedSensors =
+            OrderedSelectedSensors =
             [
                 new CollectionRouteSelectedSensorDto
                 {
@@ -367,7 +367,7 @@ public sealed class SimulationPolicyTests
                     FillTimestamp = DateTime.UtcNow
                 }
             ],
-            TotalDistance = 1.25,
+            TotalDistanceMeters = 1.25,
             RouteGenerationMs = 0.1
         };
         var routingService = new StubCollectionRoutingService(applicationRoute);
@@ -379,7 +379,7 @@ public sealed class SimulationPolicyTests
         SimulationRoute route = await provider.GetRouteAsync();
 
         Assert.Equal([7L], route.SensorIds);
-        Assert.Equal(1.25, route.Distance);
+        Assert.Equal(1.25, route.DistanceKilometers);
         Assert.Equal(2, route.Coordinates.Count);
         Assert.True(routingService.WasCalled);
     }

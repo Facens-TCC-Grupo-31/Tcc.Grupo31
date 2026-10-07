@@ -5,7 +5,8 @@ namespace Infrastructure.Services;
 internal sealed class ThresholdNearestNeighborMetricTspPlanner(
     ThresholdPointSelectionStrategy thresholdPointSelectionStrategy,
     DijkstraShortestPathStrategy dijkstraShortestPathStrategy,
-    NearestNeighborMetricTspOrderingStrategy nearestNeighborMetricTspOrderingStrategy) : IRoutePlanningStrategy
+    AsymmetricTwoOptOrderingStrategy nearestNeighborMetricTspOrderingStrategy // Placeholder... two-opt is utilized but should get it's own separate implementation.
+    ) : IRoutePlanningStrategy
 {
     public async Task<RoutePlanningResult> PlanAsync(
         int startNodeId,

@@ -1,19 +1,20 @@
+using Application.Common.Utils;
 using Application.Services;
+using Domain.ValueObjects;
 
 namespace Simulation;
 
 public sealed record SimulationRoute(
-    IReadOnlyList<Domain.ValueObjects.Position> Coordinates,
+    IReadOnlyList<Position> Coordinates,
     IReadOnlyList<long> SensorIds,
-    double Distance);
+    double DistanceKilometers);
 
 public interface ISimulationRouteProvider
 {
     Task<SimulationRoute> GetRouteAsync(CancellationToken ct = default);
 }
 
-public sealed class FixedSimulationRouteProvider(SimulationRouteDefinition definition)
-    : ISimulationRouteProvider
+public sealed class FixedSimulationRouteProvider(SimulationRouteDefinition definition) : ISimulationRouteProvider
 {
     public Task<SimulationRoute> GetRouteAsync(CancellationToken ct = default)
     {
@@ -23,40 +24,21 @@ public sealed class FixedSimulationRouteProvider(SimulationRouteDefinition defin
         return Task.FromResult(new SimulationRoute(
             coordinates,
             definition.SensorIds,
-            CalculateDistance(coordinates)));
+            CalculateTotalDistanceKilometers(coordinates)));
     }
 
-    private static double CalculateDistance(
-        IReadOnlyList<Domain.ValueObjects.Position> coordinates)
+    private static double CalculateTotalDistanceKilometers(
+        IReadOnlyList<Position> coordinates)
     {
-        double totalDistance = 0;
+        double totalDistanceMeters = 0;
 
         for (var index = 1; index < coordinates.Count; index++)
         {
-            totalDistance += HaversineDistanceKm(coordinates[index - 1], coordinates[index]);
+            totalDistanceMeters += new LocalApproximateDistanceCalculator().CalculateDistanceMeters(coordinates[index - 1], coordinates[index]);
         }
 
-        return totalDistance;
+        return totalDistanceMeters / 1000.0;
     }
-
-    private static double HaversineDistanceKm(
-        Domain.ValueObjects.Position first,
-        Domain.ValueObjects.Position second)
-    {
-        const double earthRadiusKm = 6371.0088;
-        double latitudeDelta = DegreesToRadians(second.Latitude - first.Latitude);
-        double longitudeDelta = DegreesToRadians(second.Longitude - first.Longitude);
-        double firstLatitude = DegreesToRadians(first.Latitude);
-        double secondLatitude = DegreesToRadians(second.Latitude);
-
-        double haversine = Math.Pow(Math.Sin(latitudeDelta / 2), 2)
-            + Math.Cos(firstLatitude) * Math.Cos(secondLatitude)
-            * Math.Pow(Math.Sin(longitudeDelta / 2), 2);
-
-        return earthRadiusKm * 2 * Math.Asin(Math.Sqrt(haversine));
-    }
-
-    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
 }
 
 public static class SimulationRouteProviderFactory
