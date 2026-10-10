@@ -2,7 +2,7 @@
   "profiles": {
     "Simulation": {
       "commandName": "Project",
-      "commandLineArgs": "--scenario dynamic",
+      "commandLineArgs": "--scenario scenario-2-dynamic",
       "workingDirectory": "C:\\Users\\pedroghiotti\\source\\repos\\Tcc\\Backend"
     }
   }

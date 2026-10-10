@@ -6,6 +6,8 @@ internal sealed class AsymmetricTwoOptOrderingStrategy : IRouteOrderingStrategy
 {
     private readonly NearestNeighborMetricTspOrderingStrategy _initialOrderingStrategy = new();
 
+    const double MINIMUM_IMPROVEMENT_METERS = -1e-6;
+
     public List<int> BuildRoute(
         int startNodeId,
         int endNodeId,
@@ -39,7 +41,9 @@ internal sealed class AsymmetricTwoOptOrderingStrategy : IRouteOrderingStrategy
                         j,
                         tryGetDistance);
 
-                    if (delta is null || delta.Value >= 0)
+                    if (   delta is null
+                        || !double.IsFinite(delta.Value)
+                        || delta.Value >= MINIMUM_IMPROVEMENT_METERS)
                     {
                         continue;
                     }
