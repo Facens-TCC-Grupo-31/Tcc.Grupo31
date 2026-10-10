@@ -32,8 +32,8 @@ public sealed class SqliteSimulationEnvironmentFactory : ISimulationApplicationE
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Routing:DepotKey"] = "simulation",
-                ["Routing:DepotLatitude"] = (definition.Sensors.FirstOrDefault()?.Position?.Latitude ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["Routing:DepotLongitude"] = (definition.Sensors.FirstOrDefault()?.Position?.Longitude ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["Routing:DepotLatitude"] = "-23.562499936276232",
+                ["Routing:DepotLongitude"] = "-47.46308852130465",
                 ["SensorLiveness:HeartbeatTtl"] = "00:10:00",
                 ["Mqtt:Broker"] = "simulation",
                 ["Mqtt:Port"] = "1883"

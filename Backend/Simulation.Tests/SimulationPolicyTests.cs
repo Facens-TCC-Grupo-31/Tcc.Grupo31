@@ -176,9 +176,46 @@ public sealed class SimulationPolicyTests
         Assert.Equal(9f, result.TotalCollectedVolumeLiters, precision: 3);
         Assert.True(result.TotalRouteDistance > 0);
         Assert.Equal(TimeSpan.FromMinutes(1), result.SimulationDuration);
-        Assert.Equal(1, result.OverflowEventCount);
+        Assert.Equal(0, result.OverflowEventCount);
         Assert.Equal(TimeSpan.Zero, result.TotalOverflowDuration);
         Assert.Equal(TimeSpan.Zero, result.MaximumSingleSensorOverflowDuration);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(1, 1, 1)]
+    [InlineData(-1, 1, 2)]
+    public void RunResult_CountsOnlyPositiveDurationOverflowEvents(
+        int collectionMinute,
+        int expectedCount,
+        int expectedDurationMinutes)
+    {
+        DateTime start = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var tracker = new SimulationOverflowTracker();
+        var collection = new CollectionExecutionResult([1L], 1f, 0);
+
+        tracker.ProcessTick(start, [1L], collectionMinute == 0 ? collection : null);
+
+        if (collectionMinute > 0)
+        {
+            tracker.ProcessTick(start.AddMinutes(collectionMinute), [1L], collection);
+        }
+
+        var definition = new SimulationScenarioDefinition(
+            new SimulationGraphDefinition("scenario.osm"),
+            new SimulationScenarioTimelineDefinition(2, TimeSpan.FromMinutes(1)),
+            new AverageFillThresholdCollectionTriggerPolicy(1),
+            []);
+        var result = new SimulationRunResult(
+            [],
+            TimeSpan.FromMinutes(2),
+            tracker.Complete(start.AddMinutes(2)),
+            definition);
+
+        Assert.Equal(expectedCount, result.OverflowEventCount);
+        Assert.Equal(TimeSpan.FromMinutes(expectedDurationMinutes), Assert.Single(result.OverflowEvents).Duration);
+        Assert.Equal(TimeSpan.FromMinutes(expectedDurationMinutes), result.TotalOverflowDuration);
+        Assert.Equal(TimeSpan.FromMinutes(expectedDurationMinutes), result.MaximumSingleSensorOverflowDuration);
     }
 
     [Fact]

@@ -21,6 +21,7 @@ public sealed class FixedSimulationRouteProvider(SimulationRouteDefinition defin
         ct.ThrowIfCancellationRequested();
 
         var coordinates = definition.Coordinates;
+
         return Task.FromResult(new SimulationRoute(
             coordinates,
             definition.SensorIds,

@@ -64,7 +64,7 @@ public sealed record SimulationRunResult(
         .Where(tick => tick.Collection is not null)
         .Sum(tick => tick.Collection!.RouteDistanceKilometers);
 
-    public int OverflowEventCount => OverflowEvents.Count;
+    public int OverflowEventCount => OverflowEvents.Count(overflowEvent => overflowEvent.Duration > TimeSpan.Zero);
 
     public TimeSpan TotalOverflowDuration => CalculateUnionDuration(
         OverflowEvents.Select(@event => (@event.StartedAt, @event.EndedAt)));
