@@ -1,17 +1,37 @@
-using Application.Common.Dtos;
 using Domain.ValueObjects;
 
 namespace Simulation;
 
-public sealed record SimulationSensorDefinition(
-    long SensorId,
-    float InitialFillLevel = 0f,
-    float FillRatePerTick = (1f/48f),
-    float CapacityLiters = 1f,
-    Position? Position = null,
-    int BaselineDistanceMm = 1000,
-    int DesiredReadingMm = 500
-);
+public sealed record SimulationSensorDefinition
+{
+    public long SensorId { get; init; }
+    public float InitialFillLevel { get; init; } = 0;
+    public float FillRatePerTick { get; init; }
+    public float CapacityLiters { get; init; } = 50;
+    public Position? Position { get; init; }
+    public int BaselineDistanceMm { get; init; } = 1000;
+    public int DesiredReadingMm { get; init; } = 500;
+
+    public SimulationSensorDefinition(
+        long sensorId,
+        float fillRatePerTick = (1f / 48f),
+        Position? position = null)
+    {
+        SensorId = sensorId;
+        FillRatePerTick = fillRatePerTick;
+        Position = position;
+    }
+
+    public SimulationSensorDefinition(
+        long sensorId,
+        TimeSpan timeToFull,
+        Position? position = null)
+    {
+        SensorId = sensorId;
+        FillRatePerTick = 1f / (float)timeToFull.TotalHours;
+        Position = position;
+    }
+};
 
 public sealed record SimulationSensorReading(
     long SensorId,

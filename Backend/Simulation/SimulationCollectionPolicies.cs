@@ -1,12 +1,10 @@
-using Application.Common.Dtos;
-using Domain.ValueObjects;
+using System.Collections.Frozen;
 
 namespace Simulation;
 
-public enum CollectionRouteExecutionMode
+public interface ICollectionTriggerPolicy
 {
-    ApplicationStrategy,
-    FixedBaselineRoute
+    bool ShouldTrigger(CollectionTriggerContext context);
 }
 
 public sealed record CollectionTriggerContext(
@@ -15,20 +13,6 @@ public sealed record CollectionTriggerContext(
     int ActiveSensorCount,
     float AverageFillLevel,
     IReadOnlyList<long> CriticalSensorIds);
-
-public sealed record CollectionRouteExecutionDecision(
-    CollectionRouteExecutionMode Mode,
-    IReadOnlyList<Position> RouteCoordinates);
-
-public interface ICollectionTriggerPolicy
-{
-    bool ShouldTrigger(CollectionTriggerContext context);
-}
-
-public interface ICollectionRouteExecutionStrategy
-{
-    CollectionRouteExecutionDecision SelectExecution(CollectionRouteRequestOptionsDto requestOptions);
-}
 
 public sealed class AverageFillThresholdCollectionTriggerPolicy(float threshold) : ICollectionTriggerPolicy
 {
@@ -47,7 +31,7 @@ public sealed class SpacedCollectionTriggerPolicy(TimeSpan interval, TimeSpan in
     public bool ShouldTrigger(CollectionTriggerContext context)
     {
         var shouldTrigger = context.ElapsedTime == InitialOffset || ((context.ElapsedTime - InitialOffset).Ticks % Interval.Ticks == 0);
-        
+
         return shouldTrigger;
     }
 }
@@ -62,18 +46,17 @@ public sealed class CriticalThresholdCollectionTriggerPolicy(float criticalThres
     }
 }
 
-public sealed class FixedBaselineCollectionRouteExecutionStrategy(
-    Position depot,
-    IReadOnlyList<Position> fixedRouteCoordinates) : ICollectionRouteExecutionStrategy
+public sealed class ScheduledWeekdaysCollectionTriggerPolicy(TimeOnly? timeOfDay = null, params DayOfWeek[] scheduledDaysOfWeek) : ICollectionTriggerPolicy
 {
-    public Position Depot { get; } = depot;
+    private FrozenSet<DayOfWeek> SchedulesDaysOfWeek { get; } = FrozenSet.Create(scheduledDaysOfWeek);
 
-    public IReadOnlyList<Position> FixedRouteCoordinates { get; } = fixedRouteCoordinates;
-
-    public CollectionRouteExecutionDecision SelectExecution(CollectionRouteRequestOptionsDto requestOptions)
+    public bool ShouldTrigger(CollectionTriggerContext context)
     {
-        return new CollectionRouteExecutionDecision(
-            CollectionRouteExecutionMode.FixedBaselineRoute,
-            FixedRouteCoordinates);
+        if (timeOfDay is not null && TimeOnly.FromDateTime(context.Timestamp) != timeOfDay)
+        {
+            return false;
+        }
+
+        return SchedulesDaysOfWeek.Contains(context.Timestamp.DayOfWeek);
     }
 }

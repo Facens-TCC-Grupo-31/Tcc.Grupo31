@@ -7,7 +7,6 @@ public sealed class SimulationOrchestrator
     public async Task<SimulationRunResult> RunAsync(
         SimulationScenarioDefinition definition,
         ISimulationRouteProvider routeProvider,
-        DateTime startTimeUtc,
         ISimulationReadingSink? readingSink = null,
         CancellationToken ct = default)
     {
@@ -19,14 +18,18 @@ public sealed class SimulationOrchestrator
             .ToList();
 
         var overflowTracker = new SimulationOverflowTracker();
-        var ticks = new List<SimulationTickResult>(definition.TickCount);
+        var ticks = new List<SimulationTickResult>(definition.Timeline.TickCount);
 
-        for (var tickIndex = 0; tickIndex < definition.TickCount; tickIndex++)
+        var startTime = definition.Timeline.StartTimeUtc ?? DateTime.UtcNow;
+        var duration = TimeSpan.FromTicks(definition.Timeline.TickInterval.Ticks * definition.Timeline.TickCount);
+        var horizon = startTime + duration;
+
+        for (var tickIndex = 0; tickIndex < definition.Timeline.TickCount; tickIndex++)
         {
             ct.ThrowIfCancellationRequested();
 
-            TimeSpan elapsedTime = TimeSpan.FromTicks(definition.TickInterval.Ticks * tickIndex);
-            DateTime timestamp = startTimeUtc + elapsedTime;
+            var elapsedTime = TimeSpan.FromTicks(definition.Timeline.TickInterval.Ticks * tickIndex);
+            var timestamp = startTime + elapsedTime;
 
             if (tickIndex > 0)
             {
@@ -104,8 +107,6 @@ public sealed class SimulationOrchestrator
             ));
         }
 
-        var duration = TimeSpan.FromTicks(definition.TickInterval.Ticks * definition.TickCount);
-        DateTime horizon = startTimeUtc + duration;
         return new SimulationRunResult(ticks, duration, overflowTracker.Complete(horizon), definition);
     }
 
@@ -113,12 +114,12 @@ public sealed class SimulationOrchestrator
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (definition.TickInterval <= TimeSpan.Zero)
+        if (definition.Timeline.TickInterval <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(definition), "Tick interval must be positive.");
         }
 
-        if (definition.TickCount < 0)
+        if (definition.Timeline.TickCount < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(definition), "Tick count cannot be negative.");
         }

@@ -6,8 +6,14 @@ SimulationCommandLineOptions commandLine = SimulationCommandLineOptions.Parse(ar
 
 var scenarioDefinition = commandLine.Scenario switch
 {
-    SimulationScenarioKind.Baseline => ScenarioDefinitions.Baseline,
-    SimulationScenarioKind.Dynamic => ScenarioDefinitions.Dynamic,
+    SimulationScenarioKind.Scenario_1_Baseline => ScenarioDefinitions.Scenario1.Baseline,
+    SimulationScenarioKind.Scenario_1_Dynamic => ScenarioDefinitions.Scenario1.Dynamic,
+    SimulationScenarioKind.Scenario_2_Baseline => ScenarioDefinitions.Scenario2.Baseline,
+    SimulationScenarioKind.Scenario_2_Dynamic => ScenarioDefinitions.Scenario2.Dynamic,
+    SimulationScenarioKind.Scenario_3_Baseline => ScenarioDefinitions.Scenario3.Baseline,
+    SimulationScenarioKind.Scenario_3_Dynamic => ScenarioDefinitions.Scenario3.Dynamic,
+    SimulationScenarioKind.Scenario_4_Baseline => ScenarioDefinitions.Scenario4.Baseline,
+    SimulationScenarioKind.Scenario_4_Dynamic => ScenarioDefinitions.Scenario4.Dynamic,
     _ => throw new UnreachableException()
 };
 
@@ -23,7 +29,6 @@ await using (var environment = await environmentFactory.CreateAsync(scenarioDefi
     simulationResult = await orchestrator.RunAsync(
         scenarioDefinition,
         environment.RouteProvider,
-        startTimeUtc,
         environment.ReadingSink
     );
 }

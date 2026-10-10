@@ -5,8 +5,17 @@ using System.Collections.Generic;
 
 public enum SimulationScenarioKind
 {
-    Baseline,
-    Dynamic,
+    Scenario_1_Baseline,
+    Scenario_1_Dynamic,
+
+    Scenario_2_Baseline,
+    Scenario_2_Dynamic,
+    
+    Scenario_3_Baseline,
+    Scenario_3_Dynamic,
+    
+    Scenario_4_Baseline,
+    Scenario_4_Dynamic,
 }
 
 public sealed record SimulationCommandLineOptions(SimulationScenarioKind Scenario)
@@ -20,7 +29,7 @@ public sealed record SimulationCommandLineOptions(SimulationScenarioKind Scenari
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        SimulationScenarioKind scenario = SimulationScenarioKind.Baseline;
+        SimulationScenarioKind scenario = SimulationScenarioKind.Scenario_1_Baseline;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -46,8 +55,15 @@ public sealed record SimulationCommandLineOptions(SimulationScenarioKind Scenari
     {
         return value.ToLowerInvariant() switch
         {
-            "baseline" => SimulationScenarioKind.Baseline,
-            "dynamic" => SimulationScenarioKind.Dynamic,
+            "scenario-1-baseline" => SimulationScenarioKind.Scenario_1_Baseline,
+            "scenario-1-dynamic" => SimulationScenarioKind.Scenario_1_Dynamic,
+            "scenario-2-baseline" => SimulationScenarioKind.Scenario_2_Baseline,
+            "scenario-2-dynamic" => SimulationScenarioKind.Scenario_2_Dynamic,
+            "scenario-3-baseline" => SimulationScenarioKind.Scenario_3_Baseline,
+            "scenario-3-dynamic" => SimulationScenarioKind.Scenario_3_Dynamic,
+            "scenario-4-baseline" => SimulationScenarioKind.Scenario_4_Baseline,
+            "scenario-4-dynamic" => SimulationScenarioKind.Scenario_4_Dynamic,
+
             _ => throw new ArgumentException($"Unknown scenario '{value}'. {Usage}")
         };
     }
