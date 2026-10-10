@@ -45,7 +45,11 @@ public partial class ScenarioDefinitions
 
     }
 
-    private static readonly IReadOnlyList<Position> _baselineScenarioFixedRoute = [
+    private static readonly IReadOnlyList<Position> _baselineScenarioFixedRoute = CreateBaselineRoute();
+
+    private static IReadOnlyList<Position> CreateBaselineRoute()
+    {
+        IReadOnlyList<(double Longitude, double Latitude)> coordinates = [
         new(-47.46308852130465, -23.562499936276232),
         new(-47.4630876, -23.5624689),
         new(-47.4631155, -23.5624213),
@@ -167,6 +171,9 @@ public partial class ScenarioDefinitions
         new(-47.4631538, -23.564699),
         new(-47.46308852130465, -23.562499936276232),
     ];
+
+        return coordinates.Select(coordinate => new Position(coordinate.Latitude, coordinate.Longitude)).ToArray();
+    }
 
     private static string OsmPath => Path.Combine(Environment.CurrentDirectory, "Simulation", "Fixtures", "scenario.osm");
 }

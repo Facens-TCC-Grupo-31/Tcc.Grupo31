@@ -54,7 +54,11 @@ public sealed record SimulationRunResult(
     IReadOnlyList<SimulationOverflowEvent> OverflowEvents,
     SimulationScenarioDefinition Definition)
 {
-    public int CollectionCount => Ticks.Count(tick => tick.CollectionTriggered);
+    public int CollectionCount => Ticks.Count(tick =>
+        tick.CollectionTriggered &&
+        tick.Collection is not null &&
+        tick.RouteExecution is { RouteCoordinates.Count: > 1 } route &&
+        route.RouteCoordinates.Any(position => position != route.RouteCoordinates[0]));
 
     public float TotalCollectedVolumeLiters => Ticks
         .Where(tick => tick.Collection is not null)
