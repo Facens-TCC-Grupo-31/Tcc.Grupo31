@@ -6,6 +6,5 @@
   <Project Path="GraphImporter.Tests/GraphImporter.Tests.csproj" />
   <Project Path="GraphImporter/GraphImporter.csproj" />
   <Project Path="Infrastructure/Infrastructure.csproj" Id="b40d2eed-84f7-4949-a484-71b6550f9dfc" />
-  <Project Path="Simulation.Tests/Simulation.Tests.csproj" />
   <Project Path="Simulation/Simulation.csproj" />
 </Solution>

@@ -35,14 +35,20 @@ public static class DependencyInjection
             .AddScoped<ISensorQueryService, SensorQueryService>()
             .AddScoped<ISensorLifecycleService, SensorLifecycleService>()
             .AddScoped<ISensorRegistrationService, SensorRegistrationService>()
+            
             .AddScoped<IPointSelectionStrategy, ThresholdPointSelectionStrategy>()
             .AddScoped<ThresholdPointSelectionStrategy>()
+            
             .AddScoped<IShortestPathStrategy, DijkstraShortestPathStrategy>()
             .AddScoped<DijkstraShortestPathStrategy>()
-            .AddScoped<IRouteOrderingStrategy, NearestNeighborMetricTspOrderingStrategy>()
+            
+            .AddScoped<IRouteOrderingStrategy, AsymmetricTwoOptOrderingStrategy>()
             .AddScoped<NearestNeighborMetricTspOrderingStrategy>()
             .AddScoped<AsymmetricTwoOptOrderingStrategy>()
+            
             .AddScoped<IRoutePlanningStrategy, ThresholdNearestNeighborMetricTspPlanner>()
+            
+            
             .AddScoped<IDepotNodeService, DepotNodeService>()
             .AddScoped<ICollectionRoutingService, CollectionRoutingService>();
 
