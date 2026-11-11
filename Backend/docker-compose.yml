@@ -55,7 +55,7 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: "Development"
-      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_URLS: "http://+:8081"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=tcc;Username=postgres;Password=postgres"
       Redis__Configuration: "redis:6379"
       Mqtt__Broker: "mosquitto"
@@ -65,7 +65,7 @@ services:
       MockRuntime__ExecutablePath: "/app/mock-runtime/pc_telemetry_runner"
       MockRuntime__BrokerUri: "tcp://mosquitto:1883"
     ports:
-      - "8080:8080"
+      - "8081:8081"
     restart: on-failure
 
   consumer:
