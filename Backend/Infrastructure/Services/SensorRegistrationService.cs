@@ -37,7 +37,7 @@ internal sealed class SensorRegistrationService(
         db.Sensors.Add(sensor);
         await db.SaveChangesAsync(ct);
 
-        string token = "test";
+        var token = Guid.NewGuid().ToString();
         await provisioningDataCache.SetAsync(
             sensor.Id,
             new ProvisioningRegistrationContext(token, position),
